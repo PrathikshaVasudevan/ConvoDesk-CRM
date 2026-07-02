@@ -7,7 +7,10 @@ import { Contact, Conversation, Message, FollowUp } from '@/types';
 export function useContacts() {
   return useQuery<Contact[]>({
     queryKey: ['contacts'],
-    queryFn: () => api.contacts.list(),
+    queryFn: async () => {
+      return await api.contacts.list();
+    },
+    initialData: [],
   });
 }
 
@@ -56,7 +59,21 @@ export function useUpdateContact() {
 export function useConversations() {
   return useQuery<Conversation[]>({
     queryKey: ['conversations'],
-    queryFn: () => api.conversations.list(),
+    queryFn: async (): Promise<Conversation[]> => {
+      const conversations = await api.conversations.list();
+      const contacts = await api.contacts.list();
+
+      return conversations.map((conv) => {
+        const contact = contacts.find((c) => c.id === conv.contactId);
+
+        return {
+          ...conv,
+          contactName: contact?.name || 'Unknown Contact',
+          contactPhone: contact?.phone || '',
+          leadIntent: contact?.leadClassification ?? undefined,
+        };
+      });
+    },
     initialData: [],
   });
 }
@@ -64,9 +81,9 @@ export function useConversations() {
 export function useMessages(conversationId: string | null) {
   return useQuery<Message[]>({
     queryKey: ['messages', conversationId],
-    queryFn: () => {
-      if (!conversationId) return Promise.resolve([]);
-      return api.conversations.getMessages(conversationId);
+    queryFn: async (): Promise<Message[]> => {
+      if (!conversationId) return [];
+      return await api.conversations.getMessages(conversationId);
     },
     enabled: !!conversationId,
     initialData: [],
@@ -92,18 +109,10 @@ export function useFollowUps() {
 
   const query = useQuery<FollowUp[]>({
     queryKey: ['followups'],
-    queryFn: async () => {
-      const followups = await api.followups.list();
-      const contacts = await api.contacts.list();
-
-      return followups.map((followup) => {
-        const contact = contacts.find((c) => c.id === followup.contactId);
-        return {
-          ...followup,
-          contactName: contact?.name || 'Unknown Contact',
-        };
-      });
+    queryFn: async (): Promise<FollowUp[]> => {
+      return await api.followups.list();
     },
+    initialData: [],
   });
 
   const toggleMutation = useMutation({
@@ -119,7 +128,7 @@ export function useFollowUps() {
 
   return {
     ...query,
-    data: query.data || [],
+    data: query.data ?? [],
     toggleStatus: toggleMutation.mutateAsync,
     isToggling: toggleMutation.isPending,
   };

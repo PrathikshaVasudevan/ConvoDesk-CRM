@@ -2,80 +2,83 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { 
-  useConversations, 
-  useMessages, 
+import {
+  useConversations,
+  useMessages,
   useSendMessage,
   useContacts,
-  useAISummary, 
-  useAIReplySuggestion 
+  useAISummary,
+  useAIReplySuggestion
 } from '@/lib/hooks/use-crm';
-import { 
-  Search, 
-  Send, 
-  Sparkles, 
-  User, 
-  Phone, 
-  Mail, 
-  Calendar, 
-  Plus, 
-  Bot, 
-  Flame, 
-  ShieldAlert, 
-  Clock, 
+import {
+  Search,
+  Send,
+  Sparkles,
+  User,
+  Phone,
+  Mail,
+  Calendar,
+  Plus,
+  Bot,
+  Flame,
+  ShieldAlert,
+  Clock,
   Loader2,
   FileText,
   PlusCircle,
   Check,
   MessageSquare
 } from 'lucide-react';
-import { Message } from '@/types';
+import { Message, Conversation, Contact } from '@/types';
 
 function InboxPageContent() {
   const searchParams = useSearchParams();
   const activeParam = searchParams.get('active');
 
-  const { data: conversations } = useConversations();
-  const { data: contacts } = useContacts();
+  const { data: conversations = [] } = useConversations();
+  const { data: contacts = [] } = useContacts();
+
   const [selectedConvId, setSelectedConvId] = useState<string>('');
-  
-  // Set initial selected conversation
+
   useEffect(() => {
+    if (conversations.length === 0) return;
+
     if (activeParam) {
-      const found = conversations.find(c => c.contactId === activeParam);
-      if (found) setSelectedConvId(found.id);
-    } else if (conversations.length > 0 && !selectedConvId) {
-      setSelectedConvId(conversations[0].id);
+      const found = conversations.find((c) => c.contactId === activeParam);
+      if (found) {
+        setSelectedConvId(found.id);
+        return;
+      }
     }
+
+    setSelectedConvId((prev) => prev || conversations[0].id);
   }, [activeParam, conversations]);
 
-  const activeConv = conversations.find(c => c.id === selectedConvId) || conversations[0];
-  const activeContact = (contacts || []).find(c => c.id === activeConv?.contactId);
+  const activeConv =
+    conversations.find((c) => c.id === selectedConvId) ?? null;
 
-  const { data: messages, isLoading: messagesLoading } = useMessages(selectedConvId);
+  const activeContact =
+    contacts.find((c) => c.id === activeConv?.contactId) ?? null;
+
+  const { data: messages = [], isLoading: messagesLoading } = useMessages(
+    selectedConvId || null
+  );
+
   const sendMessageMutation = useSendMessage();
-  const [chatMessages, setChatMessages] = useState<Message[]>([]);
   const [newMessageText, setNewMessageText] = useState('');
-  
-  // Track messages from API
-  useEffect(() => {
-    if (messages) {
-      setChatMessages(messages);
-    }
-  }, [messages, selectedConvId]);
 
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [chatMessages]);
-
-  // AI mutation hooks
   const aiSummaryMutation = useAISummary();
   const aiReplyMutation = useAIReplySuggestion();
 
   const [aiSummary, setAiSummary] = useState<string>('');
   const [aiReplySuggestion, setAiReplySuggestion] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState('');
+
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
 
   // Reset AI state on conversation change
   useEffect(() => {
@@ -102,37 +105,28 @@ function InboxPageContent() {
     e.preventDefault();
     if (!newMessageText.trim() || !selectedConvId) return;
 
-    // Optimistic local append
-    const optimisticMsg: Message = {
-      id: `msg_local_${Date.now()}`,
-      conversationId: selectedConvId,
-      senderId: 'agent1',
-      senderType: 'agent',
-      content: newMessageText,
-      timestamp: new Date().toISOString(),
-      status: 'sent'
-    };
-
-    setChatMessages(prev => [...prev, optimisticMsg]);
     const text = newMessageText;
     setNewMessageText('');
 
     try {
-      await sendMessageMutation.mutateAsync({ conversationId: selectedConvId, content: text });
+      await sendMessageMutation.mutateAsync({
+        conversationId: selectedConvId,
+        content: text,
+      });
     } catch (err) {
       console.warn('Failed to send message to API:', err);
     }
   };
 
   // Filter conversations based on search
-  const filteredConversations = conversations.filter(c => 
+  const filteredConversations = conversations.filter(c =>
     c.contactName.toLowerCase().includes(searchQuery.toLowerCase()) ||
     c.lastMessage?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   return (
     <div className="h-[calc(100vh-8.5rem)] grid grid-cols-1 lg:grid-cols-12 border border-zinc-800/80 rounded-xl overflow-hidden bg-zinc-900/10 backdrop-blur-md animate-fade-in">
-      
+
       {/* COLUMN 1: Conversation List (4/12 width) */}
       <div className="lg:col-span-4 border-r border-zinc-800/80 flex flex-col h-full bg-zinc-950/20">
         {/* Search */}
@@ -160,9 +154,8 @@ function InboxPageContent() {
                 onClick={() => {
                   setSelectedConvId(conv.id);
                 }}
-                className={`w-full p-4 flex items-start text-left hover:bg-zinc-900/30 transition-all ${
-                  isSelected ? 'bg-emerald-600/10 border-l-2 border-emerald-500' : ''
-                }`}
+                className={`w-full p-4 flex items-start text-left hover:bg-zinc-900/30 transition-all ${isSelected ? 'bg-emerald-600/10 border-l-2 border-emerald-500' : ''
+                  }`}
               >
                 <div className="relative flex-shrink-0 mr-3">
                   <img
@@ -172,14 +165,14 @@ function InboxPageContent() {
                   />
                   <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-emerald-500 border-2 border-zinc-950 rounded-full" />
                 </div>
-                
+
                 <div className="flex-1 min-w-0">
                   <div className="flex justify-between items-baseline mb-1">
                     <h4 className="text-xs font-bold text-zinc-200 truncate">{conv.contactName}</h4>
                     <span className="text-[9px] text-zinc-500">{conv.lastMessageTime}</span>
                   </div>
                   <p className="text-[10px] text-zinc-400 truncate pr-6 leading-relaxed">{conv.lastMessage}</p>
-                  
+
                   {/* Tags & Badges */}
                   <div className="flex items-center gap-1.5 mt-2">
                     {conv.unreadCount > 0 && (
@@ -188,11 +181,10 @@ function InboxPageContent() {
                       </span>
                     )}
                     {conv.leadIntent && (
-                      <span className={`text-[8px] px-1.5 py-0.5 rounded font-semibold border ${
-                        conv.leadIntent === 'Hot'
-                          ? 'bg-red-500/10 text-red-400 border-red-500/20'
-                          : 'bg-zinc-800 text-zinc-500 border-zinc-700'
-                      }`}>
+                      <span className={`text-[8px] px-1.5 py-0.5 rounded font-semibold border ${conv.leadIntent === 'Hot'
+                        ? 'bg-red-500/10 text-red-400 border-red-500/20'
+                        : 'bg-zinc-800 text-zinc-500 border-zinc-700'
+                        }`}>
                         {conv.leadIntent}
                       </span>
                     )}
@@ -237,15 +229,14 @@ function InboxPageContent() {
                   <Loader2 className="w-5 h-5 animate-spin text-emerald-500 mb-2" />
                   <span>Loading messages...</span>
                 </div>
-              ) : chatMessages.length > 0 ? chatMessages.map((msg) => {
+              ) : messages.length > 0 ? messages.map((msg) => {
                 const isAgent = msg.senderType === 'agent';
                 return (
                   <div key={msg.id} className={`flex ${isAgent ? 'justify-end' : 'justify-start'}`}>
-                    <div className={`max-w-xs rounded-xl p-3.5 text-xs shadow-md border ${
-                      isAgent 
-                        ? 'bg-emerald-600/15 border-emerald-500/20 text-emerald-100 rounded-tr-none' 
-                        : 'bg-zinc-900 border-zinc-800 text-zinc-300 rounded-tl-none'
-                    }`}>
+                    <div className={`max-w-xs rounded-xl p-3.5 text-xs shadow-md border ${isAgent
+                      ? 'bg-emerald-600/15 border-emerald-500/20 text-emerald-100 rounded-tr-none'
+                      : 'bg-zinc-900 border-zinc-800 text-zinc-300 rounded-tl-none'
+                      }`}>
                       <p className="leading-relaxed">{msg.content}</p>
                       <div className="mt-1 flex justify-end items-center gap-1 text-[8px] text-zinc-500">
                         <span>
@@ -272,7 +263,7 @@ function InboxPageContent() {
               <div className="mx-6 mb-2 p-3 bg-zinc-900 border border-emerald-500/20 rounded-lg animate-slide-up flex flex-col gap-2">
                 <div className="flex justify-between items-center text-[10px] text-emerald-400 font-semibold">
                   <span className="flex items-center gap-1"><Bot className="w-3.5 h-3.5" /> Suggested Reply</span>
-                  <button 
+                  <button
                     onClick={() => {
                       setNewMessageText(aiReplySuggestion);
                       setAiReplySuggestion('');
@@ -403,13 +394,12 @@ function InboxPageContent() {
                 <h4 className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Lead Intel</h4>
                 <div className="flex flex-wrap gap-2">
                   {activeConv.leadIntent && (
-                    <span className={`text-[9px] px-2 py-0.5 rounded font-semibold border ${
-                      activeConv.leadIntent === 'Hot'
-                        ? 'bg-red-500/10 text-red-400 border-red-500/25'
-                        : activeConv.leadIntent === 'Warm'
+                    <span className={`text-[9px] px-2 py-0.5 rounded font-semibold border ${activeConv.leadIntent === 'Hot'
+                      ? 'bg-red-500/10 text-red-400 border-red-500/25'
+                      : activeConv.leadIntent === 'Warm'
                         ? 'bg-amber-500/10 text-amber-400 border-amber-500/25'
                         : 'bg-zinc-800 text-zinc-500 border-zinc-700'
-                    }`}>
+                      }`}>
                       {activeConv.leadIntent === 'Hot' && <Flame className="w-3 h-3 inline text-red-500 animate-pulse mr-0.5" />}
                       {activeConv.leadIntent}
                     </span>
