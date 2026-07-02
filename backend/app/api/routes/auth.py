@@ -1,26 +1,25 @@
-from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordRequestForm
-from sqlalchemy.orm import Session
-from app.schemas import Token, UserCreate, UserResponse
-from app.core.security import create_access_token, verify_password, get_password_hash
+from fastapi import APIRouter, HTTPException
+from app.schemas.user import LoginRequest, LoginResponse, UserResponse
 
-router = APIRouter()
+router = APIRouter(prefix="/auth", tags=["Auth"])
 
-@router.post("/login", response_model=Token)
-async def login(credentials: UserCreate):
-  # In a real implementation, we would query the User table using credentials.email
-  # For the scaffold, we mock successful authentication for alex@convodesk.crm
-  if credentials.email == "alex@convodesk.crm" and credentials.password == "password":
-    access_token = create_access_token(subject=credentials.email)
-    return {"access_token": access_token, "token_type": "bearer"}
-  
-  # Allow demo logging for any user
-  if len(credentials.password) >= 6:
-    access_token = create_access_token(subject=credentials.email)
-    return {"access_token": access_token, "token_type": "bearer"}
 
-  raise HTTPException(
-    status_code=status.HTTP_401_UNAUTHORIZED,
-    detail="Incorrect email or password",
-    headers={"WWW-Authenticate": "Bearer"},
-  )
+@router.post("/login", response_model=LoginResponse)
+def login(payload: LoginRequest):
+    if payload.email != "admin@convodesk.com" or payload.password != "password123":
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+
+    user = UserResponse(
+        id="u1",
+        full_name="Admin User",
+        email="admin@convodesk.com",
+        role="admin",
+        avatar_url=None,
+        created_at="2026-07-02T00:00:00",
+    )
+
+    return LoginResponse(
+        access_token="mock-jwt-token",
+        token_type="bearer",
+        user=user,
+    )

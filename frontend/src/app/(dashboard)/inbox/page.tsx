@@ -5,7 +5,8 @@ import { useSearchParams } from 'next/navigation';
 import { 
   useConversations, 
   useMessages, 
-  useFollowUps, 
+  useSendMessage,
+  useContacts,
   useAISummary, 
   useAIReplySuggestion 
 } from '@/lib/hooks/use-crm';
@@ -28,7 +29,6 @@ import {
   Check,
   MessageSquare
 } from 'lucide-react';
-import { MOCK_CONTACTS, MOCK_TAGS } from '@/data/mock-data';
 import { Message } from '@/types';
 
 function InboxPageContent() {
@@ -36,6 +36,7 @@ function InboxPageContent() {
   const activeParam = searchParams.get('active');
 
   const { data: conversations } = useConversations();
+  const { data: contacts } = useContacts();
   const [selectedConvId, setSelectedConvId] = useState<string>('');
   
   // Set initial selected conversation
@@ -49,13 +50,14 @@ function InboxPageContent() {
   }, [activeParam, conversations]);
 
   const activeConv = conversations.find(c => c.id === selectedConvId) || conversations[0];
-  const activeContact = MOCK_CONTACTS.find(c => c.id === activeConv?.contactId);
+  const activeContact = (contacts || []).find(c => c.id === activeConv?.contactId);
 
-  const { data: messages } = useMessages(selectedConvId);
+  const { data: messages, isLoading: messagesLoading } = useMessages(selectedConvId);
+  const sendMessageMutation = useSendMessage();
   const [chatMessages, setChatMessages] = useState<Message[]>([]);
   const [newMessageText, setNewMessageText] = useState('');
   
-  // Track messages locally to allow sending mock messages
+  // Track messages from API
   useEffect(() => {
     if (messages) {
       setChatMessages(messages);
@@ -75,6 +77,12 @@ function InboxPageContent() {
   const [aiReplySuggestion, setAiReplySuggestion] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState('');
 
+  // Reset AI state on conversation change
+  useEffect(() => {
+    setAiSummary('');
+    setAiReplySuggestion('');
+  }, [selectedConvId]);
+
   // Handle AI summary trigger
   const handleGenerateSummary = async () => {
     if (!selectedConvId) return;
@@ -90,11 +98,12 @@ function InboxPageContent() {
   };
 
   // Handle send message
-  const handleSendMessage = (e: React.FormEvent) => {
+  const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newMessageText.trim() || !selectedConvId) return;
 
-    const newMsg: Message = {
+    // Optimistic local append
+    const optimisticMsg: Message = {
       id: `msg_local_${Date.now()}`,
       conversationId: selectedConvId,
       senderId: 'agent1',
@@ -104,22 +113,15 @@ function InboxPageContent() {
       status: 'sent'
     };
 
-    setChatMessages(prev => [...prev, newMsg]);
+    setChatMessages(prev => [...prev, optimisticMsg]);
+    const text = newMessageText;
     setNewMessageText('');
 
-    // Trigger mock auto-reply after 2 seconds
-    setTimeout(() => {
-      const autoReply: Message = {
-        id: `msg_local_reply_${Date.now()}`,
-        conversationId: selectedConvId,
-        senderId: activeConv.contactId,
-        senderType: 'contact',
-        content: `Thanks for the details! Our team will look into this.`,
-        timestamp: new Date().toISOString(),
-        status: 'read'
-      };
-      setChatMessages(prev => [...prev, autoReply]);
-    }, 2000);
+    try {
+      await sendMessageMutation.mutateAsync({ conversationId: selectedConvId, content: text });
+    } catch (err) {
+      console.warn('Failed to send message to API:', err);
+    }
   };
 
   // Filter conversations based on search
@@ -149,16 +151,14 @@ function InboxPageContent() {
 
         {/* Chat List */}
         <div className="flex-1 overflow-y-auto divide-y divide-zinc-850">
-          {filteredConversations.map((conv) => {
+          {filteredConversations.length > 0 ? filteredConversations.map((conv) => {
             const isSelected = conv.id === selectedConvId;
-            const contact = MOCK_CONTACTS.find(c => c.id === conv.contactId);
+            const contact = (contacts || []).find(c => c.id === conv.contactId);
             return (
               <button
                 key={conv.id}
                 onClick={() => {
                   setSelectedConvId(conv.id);
-                  setAiSummary('');
-                  setAiReplySuggestion('');
                 }}
                 className={`w-full p-4 flex items-start text-left hover:bg-zinc-900/30 transition-all ${
                   isSelected ? 'bg-emerald-600/10 border-l-2 border-emerald-500' : ''
@@ -187,20 +187,25 @@ function InboxPageContent() {
                         {conv.unreadCount}
                       </span>
                     )}
-                    {contact?.leadClassification && (
+                    {conv.leadIntent && (
                       <span className={`text-[8px] px-1.5 py-0.5 rounded font-semibold border ${
-                        contact.leadClassification === 'Hot'
+                        conv.leadIntent === 'Hot'
                           ? 'bg-red-500/10 text-red-400 border-red-500/20'
                           : 'bg-zinc-800 text-zinc-500 border-zinc-700'
                       }`}>
-                        {contact.leadClassification}
+                        {conv.leadIntent}
                       </span>
                     )}
                   </div>
                 </div>
               </button>
             );
-          })}
+          }) : (
+            <div className="flex flex-col items-center justify-center h-full text-zinc-500 text-xs py-12">
+              <MessageSquare className="w-6 h-6 mb-2 opacity-50" />
+              No conversations found
+            </div>
+          )}
         </div>
       </div>
 
@@ -227,7 +232,12 @@ function InboxPageContent() {
 
             {/* Message Pane */}
             <div className="flex-1 p-6 overflow-y-auto space-y-4">
-              {chatMessages.map((msg) => {
+              {messagesLoading ? (
+                <div className="flex flex-col items-center justify-center h-full text-zinc-500 text-xs">
+                  <Loader2 className="w-5 h-5 animate-spin text-emerald-500 mb-2" />
+                  <span>Loading messages...</span>
+                </div>
+              ) : chatMessages.length > 0 ? chatMessages.map((msg) => {
                 const isAgent = msg.senderType === 'agent';
                 return (
                   <div key={msg.id} className={`flex ${isAgent ? 'justify-end' : 'justify-start'}`}>
@@ -239,7 +249,7 @@ function InboxPageContent() {
                       <p className="leading-relaxed">{msg.content}</p>
                       <div className="mt-1 flex justify-end items-center gap-1 text-[8px] text-zinc-500">
                         <span>
-                          {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          {msg.timestamp ? new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
                         </span>
                         {isAgent && (
                           <span className="text-emerald-500">✓✓</span>
@@ -248,7 +258,12 @@ function InboxPageContent() {
                     </div>
                   </div>
                 );
-              })}
+              }) : (
+                <div className="flex flex-col items-center justify-center h-full text-zinc-500 text-xs">
+                  <MessageSquare className="w-6 h-6 mb-2 opacity-50" />
+                  <span>No messages yet</span>
+                </div>
+              )}
               <div ref={messagesEndRef} />
             </div>
 
@@ -296,7 +311,8 @@ function InboxPageContent() {
                 />
                 <button
                   type="submit"
-                  className="p-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg transition-colors shadow-lg shadow-emerald-600/15"
+                  disabled={sendMessageMutation.isPending}
+                  className="p-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg transition-colors shadow-lg shadow-emerald-600/15 disabled:opacity-50"
                 >
                   <Send className="w-4 h-4" />
                 </button>
@@ -318,7 +334,7 @@ function InboxPageContent() {
             {/* Quick Profile */}
             <div className="text-center pb-6 border-b border-zinc-800/80">
               <img
-                src={activeContact.avatarUrl}
+                src={activeContact.avatarUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150'}
                 alt={activeContact.name}
                 className="w-16 h-16 rounded-full object-cover mx-auto ring-2 ring-emerald-500/20 mb-3"
               />
@@ -347,21 +363,6 @@ function InboxPageContent() {
               </div>
             </div>
 
-            {/* Tags section */}
-            <div className="space-y-2">
-              <h4 className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Lead Tags</h4>
-              <div className="flex flex-wrap gap-1.5">
-                {activeContact.tags?.map(t => (
-                  <span key={t.id} className={`text-[8px] px-2 py-0.5 rounded font-semibold border ${t.color}`}>
-                    {t.name}
-                  </span>
-                ))}
-                <button className="text-[8px] px-2 py-0.5 rounded font-semibold border border-dashed border-zinc-800 text-zinc-500 hover:text-zinc-300 hover:border-zinc-700 flex items-center gap-0.5 transition-colors">
-                  <Plus className="w-2.5 h-2.5" /> Add
-                </button>
-              </div>
-            </div>
-
             {/* AI Summary Block */}
             <div className="space-y-3 bg-zinc-900/30 border border-zinc-850 p-4 rounded-lg">
               <div className="flex justify-between items-center">
@@ -384,7 +385,7 @@ function InboxPageContent() {
                 </div>
               ) : aiSummary ? (
                 <p className="text-[10px] text-zinc-300 leading-relaxed italic">{aiSummary}</p>
-              ) : activeConv.summary ? (
+              ) : activeConv?.summary ? (
                 <p className="text-[10px] text-zinc-300 leading-relaxed italic">{activeConv.summary}</p>
               ) : (
                 <button
@@ -396,13 +397,31 @@ function InboxPageContent() {
               )}
             </div>
 
-            {/* Notes Section */}
-            <div className="space-y-2">
-              <h4 className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Internal Notes</h4>
-              <div className="p-3 bg-zinc-900 border border-zinc-850 rounded-lg text-[10px] text-zinc-400 italic leading-relaxed">
-                "Sarah Jenkins leads customer support and is reviewing our API response speed. Highly interested in standard Salesforce plugin."
+            {/* Lead Intent & Priority */}
+            {activeConv && (
+              <div className="space-y-2">
+                <h4 className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Lead Intel</h4>
+                <div className="flex flex-wrap gap-2">
+                  {activeConv.leadIntent && (
+                    <span className={`text-[9px] px-2 py-0.5 rounded font-semibold border ${
+                      activeConv.leadIntent === 'Hot'
+                        ? 'bg-red-500/10 text-red-400 border-red-500/25'
+                        : activeConv.leadIntent === 'Warm'
+                        ? 'bg-amber-500/10 text-amber-400 border-amber-500/25'
+                        : 'bg-zinc-800 text-zinc-500 border-zinc-700'
+                    }`}>
+                      {activeConv.leadIntent === 'Hot' && <Flame className="w-3 h-3 inline text-red-500 animate-pulse mr-0.5" />}
+                      {activeConv.leadIntent}
+                    </span>
+                  )}
+                  {activeConv.prioritySuggestion && (
+                    <span className="text-[9px] px-2 py-0.5 rounded font-semibold border bg-zinc-800 text-zinc-400 border-zinc-700">
+                      Priority: {activeConv.prioritySuggestion}
+                    </span>
+                  )}
+                </div>
               </div>
-            </div>
+            )}
           </>
         ) : (
           <div className="h-full flex flex-col items-center justify-center text-zinc-500 text-center">

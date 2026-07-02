@@ -12,7 +12,8 @@ import {
   Clock, 
   ChevronRight,
   Flame,
-  AlertCircle
+  AlertCircle,
+  Loader2
 } from 'lucide-react';
 import Link from 'next/link';
 import { 
@@ -31,11 +32,23 @@ import {
 const COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#8b5cf6', '#ef4444'];
 
 export default function DashboardPage() {
-  const { data: stats } = useAnalyticsStats();
-  const { data: contacts } = useContacts();
+  const { data: stats, isLoading: statsLoading } = useAnalyticsStats();
+  const { data: contacts, isLoading: contactsLoading } = useContacts();
 
   // Pick top 4 recent contacts
-  const recentContacts = contacts.slice(0, 4);
+  const recentContacts = (contacts || []).slice(0, 4);
+
+  const chatsByDay = stats?.chatsByDay || [];
+  const leadsByStatus = stats?.leadsByStatus || [];
+
+  if (statsLoading && contactsLoading) {
+    return (
+      <div className="h-64 flex flex-col items-center justify-center text-zinc-500 text-xs">
+        <Loader2 className="w-6 h-6 animate-spin text-emerald-500 mb-2" />
+        <span>Loading dashboard...</span>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8 animate-fade-in">
@@ -66,12 +79,12 @@ export default function DashboardPage() {
             </div>
           </div>
           <div className="mt-4 flex items-baseline gap-2">
-            <span className="text-2xl font-bold text-zinc-50">{stats.totalLeads}</span>
+            <span className="text-2xl font-bold text-zinc-50">{stats?.totalLeads ?? 0}</span>
             <span className="text-[10px] text-emerald-400 font-semibold bg-emerald-500/10 px-1.5 py-0.5 rounded flex items-center gap-0.5">
               +12% <TrendingUp className="w-3 h-3" />
             </span>
           </div>
-          <p className="text-[10px] text-zinc-500 mt-2">v.s. last month (111 leads)</p>
+          <p className="text-[10px] text-zinc-500 mt-2">v.s. last month</p>
         </div>
 
         {/* Active Chats */}
@@ -84,7 +97,7 @@ export default function DashboardPage() {
             </div>
           </div>
           <div className="mt-4 flex items-baseline gap-2">
-            <span className="text-2xl font-bold text-zinc-50">{stats.activeChats}</span>
+            <span className="text-2xl font-bold text-zinc-50">{stats?.activeChats ?? 0}</span>
             <span className="text-[10px] text-emerald-400 font-semibold bg-emerald-500/10 px-1.5 py-0.5 rounded">
               3 new replies
             </span>
@@ -101,7 +114,7 @@ export default function DashboardPage() {
             </div>
           </div>
           <div className="mt-4 flex items-baseline gap-2">
-            <span className="text-2xl font-bold text-zinc-50">{stats.pendingFollowups}</span>
+            <span className="text-2xl font-bold text-zinc-50">{stats?.pendingFollowups ?? 0}</span>
             <span className="text-[10px] text-amber-400 font-semibold bg-amber-500/10 px-1.5 py-0.5 rounded flex items-center gap-0.5">
               <AlertCircle className="w-3 h-3" /> 2 critical
             </span>
@@ -118,12 +131,12 @@ export default function DashboardPage() {
             </div>
           </div>
           <div className="mt-4 flex items-baseline gap-2">
-            <span className="text-2xl font-bold text-zinc-50">{stats.pipelineValue}</span>
+            <span className="text-2xl font-bold text-zinc-50">{stats?.pipelineValue ?? '$0'}</span>
             <span className="text-[10px] text-purple-400 font-semibold bg-purple-500/10 px-1.5 py-0.5 rounded">
-              {stats.conversionRate}% win rate
+              {stats?.conversionRate ?? 0}% win rate
             </span>
           </div>
-          <p className="text-[10px] text-zinc-500 mt-2">Calculated from 4 active deals</p>
+          <p className="text-[10px] text-zinc-500 mt-2">Calculated from active deals</p>
         </div>
       </div>
 
@@ -138,18 +151,22 @@ export default function DashboardPage() {
             </div>
           </div>
           <div className="h-64 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={stats.chatsByDay}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
-                <XAxis dataKey="name" stroke="#71717a" fontSize={11} tickLine={false} axisLine={false} />
-                <YAxis stroke="#71717a" fontSize={11} tickLine={false} axisLine={false} />
-                <Tooltip 
-                  contentStyle={{ backgroundColor: '#18181b', borderColor: '#27272a', borderRadius: '8px' }} 
-                  labelStyle={{ color: '#a1a1aa', fontWeight: 'bold' }}
-                />
-                <Bar dataKey="count" fill="#10b981" radius={[4, 4, 0, 0]} maxBarSize={30} />
-              </BarChart>
-            </ResponsiveContainer>
+            {chatsByDay.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={chatsByDay}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
+                  <XAxis dataKey="name" stroke="#71717a" fontSize={11} tickLine={false} axisLine={false} />
+                  <YAxis stroke="#71717a" fontSize={11} tickLine={false} axisLine={false} />
+                  <Tooltip 
+                    contentStyle={{ backgroundColor: '#18181b', borderColor: '#27272a', borderRadius: '8px' }} 
+                    labelStyle={{ color: '#a1a1aa', fontWeight: 'bold' }}
+                  />
+                  <Bar dataKey="count" fill="#10b981" radius={[4, 4, 0, 0]} maxBarSize={30} />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="h-full flex items-center justify-center text-zinc-500 text-xs">No chat data yet</div>
+            )}
           </div>
         </div>
 
@@ -160,35 +177,41 @@ export default function DashboardPage() {
             <p className="text-[10px] text-zinc-500 mt-0.5">Distribution of leads in pipeline</p>
           </div>
           <div className="h-48 w-full flex justify-center items-center relative my-4">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={stats.leadsByStatus}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={60}
-                  outerRadius={80}
-                  paddingAngle={5}
-                  dataKey="value"
-                >
-                  {stats.leadsByStatus.map((entry: any, index: number) => (
-                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                  ))}
-                </Pie>
-                <Tooltip 
-                  contentStyle={{ backgroundColor: '#18181b', borderColor: '#27272a', borderRadius: '8px' }}
-                />
-              </PieChart>
-            </ResponsiveContainer>
+            {leadsByStatus.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={leadsByStatus}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={60}
+                    outerRadius={80}
+                    paddingAngle={5}
+                    dataKey="value"
+                  >
+                    {leadsByStatus.map((entry: any, index: number) => (
+                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip 
+                    contentStyle={{ backgroundColor: '#18181b', borderColor: '#27272a', borderRadius: '8px' }}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="text-zinc-500 text-xs">No pipeline data</div>
+            )}
             {/* Center Label */}
-            <div className="absolute flex flex-col items-center justify-center">
-              <span className="text-2xl font-bold text-zinc-100">{stats.totalLeads}</span>
-              <span className="text-[9px] font-semibold text-zinc-500 uppercase tracking-widest">Leads</span>
-            </div>
+            {leadsByStatus.length > 0 && (
+              <div className="absolute flex flex-col items-center justify-center">
+                <span className="text-2xl font-bold text-zinc-100">{stats?.totalLeads ?? 0}</span>
+                <span className="text-[9px] font-semibold text-zinc-500 uppercase tracking-widest">Leads</span>
+              </div>
+            )}
           </div>
           {/* Legend */}
           <div className="grid grid-cols-2 gap-2 text-[10px]">
-            {stats.leadsByStatus.map((entry: any, index: number) => (
+            {leadsByStatus.map((entry: any, index: number) => (
               <div key={entry.name} className="flex items-center gap-1.5 text-zinc-400">
                 <span className="w-2 h-2 rounded-full" style={{ backgroundColor: COLORS[index % COLORS.length] }} />
                 <span className="truncate">{entry.name} ({entry.value})</span>
@@ -210,11 +233,11 @@ export default function DashboardPage() {
           </Link>
         </div>
         <div className="divide-y divide-zinc-800/80">
-          {recentContacts.map((contact) => (
+          {recentContacts.length > 0 ? recentContacts.map((contact) => (
             <div key={contact.id} className="px-6 py-4 flex items-center justify-between hover:bg-zinc-900/20 transition-all">
               <div className="flex items-center gap-3">
                 <img 
-                  src={contact.avatarUrl} 
+                  src={contact.avatarUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150'} 
                   alt={contact.name} 
                   className="w-9 h-9 rounded-full object-cover ring-1 ring-zinc-800"
                 />
@@ -247,7 +270,7 @@ export default function DashboardPage() {
                 {/* Last active time */}
                 <div className="hidden sm:flex items-center text-[10px] text-zinc-500 gap-1">
                   <Clock className="w-3.5 h-3.5" />
-                  <span>{new Date(contact.lastContacted || '').toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                  <span>{contact.lastContacted ? new Date(contact.lastContacted).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '—'}</span>
                 </div>
 
                 <Link 
@@ -258,7 +281,11 @@ export default function DashboardPage() {
                 </Link>
               </div>
             </div>
-          ))}
+          )) : (
+            <div className="px-6 py-12 text-center text-zinc-500 text-xs">
+              No contacts yet. Add your first lead to get started.
+            </div>
+          )}
         </div>
       </div>
     </div>

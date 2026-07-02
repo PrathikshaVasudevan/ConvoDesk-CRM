@@ -1,11 +1,15 @@
-from fastapi import APIRouter
-from app.api.routes import auth, contacts, conversations, followups, analytics, ai
+from .auth import router as auth_router
+from .contacts import router as contacts_router
+from .conversations import router as conversations_router
+from .followups import router as followups_router
+from .analytics import router as analytics_router
+from .ai import router as ai_router
 
-api_router = APIRouter()
-
-api_router.include_router(auth.router, prefix="/auth", tags=["auth"])
-api_router.include_router(contacts.router, prefix="/contacts", tags=["contacts"])
-api_router.include_router(conversations.router, prefix="/conversations", tags=["conversations"])
-api_router.include_router(followups.router, prefix="/followups", tags=["followups"])
-api_router.include_router(analytics.router, prefix="/analytics", tags=["analytics"])
-api_router.include_router(ai.router, prefix="/ai", tags=["ai"])
+__all__ = [
+    "auth_router",
+    "contacts_router",
+    "conversations_router",
+    "followups_router",
+    "analytics_router",
+    "ai_router",
+]

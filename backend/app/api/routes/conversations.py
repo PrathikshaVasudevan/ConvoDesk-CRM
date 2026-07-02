@@ -1,108 +1,119 @@
-from fastapi import APIRouter, Depends, HTTPException, status
-from typing import List
 from datetime import datetime, timezone
-from app.schemas import ConversationResponse, MessageResponse, MessageCreate
 
-router = APIRouter()
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.orm import Session
 
-MOCK_CONVERSATIONS = [
-  {
-    "id": "conv1",
-    "contact_id": "c1",
-    "contact_name": "Sarah Jenkins",
-    "contact_phone": "+1 (555) 234-5678",
-    "last_message": "Thanks, I will review the API contract with my developer team tonight.",
-    "last_message_time": "18:30",
-    "unread_count": 2,
-    "summary": "Sarah is evaluating ConvoDesk for their support team (20 agents). She is satisfied with the webhook response speed and is currently reviewing the API pricing.",
-    "priority_suggestion": "High",
-    "lead_intent": "Hot"
-  },
-  {
-    "id": "conv2",
-    "contact_id": "c2",
-    "contact_name": "David Chen",
-    "contact_phone": "+65 9123 4567",
-    "last_message": "Is it possible to auto-assign chats based on agent working hours?",
-    "last_message_time": "20:15",
-    "unread_count": 1,
-    "summary": "David wants to set up automated routing rules. He is checking availability of timezone-based chat routing.",
-    "priority_suggestion": "Medium",
-    "lead_intent": "Warm"
-  },
-  {
-    "id": "conv3",
-    "contact_id": "c3",
-    "contact_name": "Elena Rostova",
-    "contact_phone": "+44 20 7946 0958",
-    "last_message": "Let us coordinate the signature on Monday afternoon.",
-    "last_message_time": "15:45",
-    "unread_count": 0,
-    "summary": "Elena has approved the pilot plan and the contract draft. The signature is set for Monday.",
-    "priority_suggestion": "High",
-    "lead_intent": "Hot"
-  }
-]
+from app.db.session import get_db
+from app.models.contact import Contact
+from app.models.conversation import Conversation
+from app.models.message import Message
+from app.schemas.conversation import (
+    ConversationResponse,
+    ConversationDetailResponse,
+    MessageCreate,
+    MessageResponse,
+)
+from app.services.conversation_service import (
+    get_conversations,
+    get_conversation_by_id,
+    get_messages_for_conversation,
+    create_message,
+)
 
-MOCK_MESSAGES = {
-  "conv1": [
-    { "id": "m1_1", "conversation_id": "conv1", "sender_id": "c1", "sender_type": "contact", "content": "Hi, I am interested in integrating ConvoDesk for our customer support team.", "timestamp": "2026-07-02T18:00:00Z", "status": "read" },
-    { "id": "m1_2", "conversation_id": "conv1", "sender_id": "agent1", "sender_type": "agent", "content": "Hello Sarah! I can definitely help with that. What systems are you currently using for CRM?", "timestamp": "2026-07-02T18:05:00Z", "status": "read" },
-    { "id": "m1_3", "conversation_id": "conv1", "sender_id": "c1", "sender_type": "contact", "content": "We are on HubSpot right now, but need a better WhatsApp workflow.", "timestamp": "2026-07-02T18:10:00Z", "status": "read" },
-    { "id": "m1_4", "conversation_id": "conv1", "sender_id": "agent1", "sender_type": "agent", "content": "Great, we have a native HubSpot syncing tool. Here is our developer doc: https://docs.convodesk.crm/api", "timestamp": "2026-07-02T18:15:00Z", "status": "read" },
-    { "id": "m1_5", "conversation_id": "conv1", "sender_id": "c1", "sender_type": "contact", "content": "Thanks, I will review the API contract with my developer team tonight.", "timestamp": "2026-07-02T18:30:00Z", "status": "delivered" }
-  ],
-  "conv2": [
-    { "id": "m2_1", "conversation_id": "conv2", "sender_id": "c2", "sender_type": "contact", "content": "Hello, what are the automated routing capabilities of ConvoDesk?", "timestamp": "2026-07-02T20:00:00Z", "status": "read" },
-    { "id": "m2_2", "conversation_id": "conv2", "sender_id": "agent1", "sender_type": "agent", "content": "Hi David! We support round-robin routing, priority-based routing, and keyword triggers.", "timestamp": "2026-07-02T20:10:00Z", "status": "read" },
-    { "id": "m2_3", "conversation_id": "conv2", "sender_id": "c2", "sender_type": "contact", "content": "Is it possible to auto-assign chats based on agent working hours?", "timestamp": "2026-07-02T20:15:00Z", "status": "delivered" }
-  ],
-  "conv3": [
-    { "id": "m3_1", "conversation_id": "conv3", "sender_id": "agent1", "sender_type": "agent", "content": "Hi Elena, I have updated the pilot agreement with the requested custom SLA clause. Let me know if that works.", "timestamp": "2026-07-02T15:30:00Z", "status": "read" },
-    { "id": "m3_2", "conversation_id": "conv3", "sender_id": "c3", "sender_type": "contact", "content": "This looks perfect. Let us coordinate the signature on Monday afternoon.", "timestamp": "2026-07-02T15:45:00Z", "status": "read" }
-  ]
-}
+router = APIRouter(prefix="/conversations", tags=["Conversations"])
 
-@router.get("", response_model=List[ConversationResponse])
-async def list_conversations():
-  return MOCK_CONVERSATIONS
 
-@router.get("/{id}", response_model=ConversationResponse)
-async def get_conversation(id: str):
-  conv = next((c for c in MOCK_CONVERSATIONS if c["id"] == id), None)
-  if not conv:
-    raise HTTPException(status_code=404, detail="Conversation not found")
-  return conv
+@router.get("", response_model=list[ConversationResponse])
+def list_conversations(db: Session = Depends(get_db)):
+    return get_conversations(db)
 
-@router.get("/{id}/messages", response_model=List[MessageResponse])
-async def list_messages(id: str):
-  if id not in MOCK_MESSAGES:
-    return []
-  return MOCK_MESSAGES[id]
 
-@router.post("/{id}/messages", response_model=MessageResponse, status_code=status.HTTP_201_CREATED)
-async def send_message(id: str, message_data: MessageCreate):
-  conv = next((c for c in MOCK_CONVERSATIONS if c["id"] == id), None)
-  if not conv:
-    raise HTTPException(status_code=404, detail="Conversation not found")
-  
-  new_id = f"m_{id}_{datetime.now(timezone.utc).timestamp()}"
-  new_msg = {
-    "id": new_id,
-    "conversation_id": id,
-    "sender_id": "agent1",
-    "sender_type": "agent",
-    "content": message_data.content,
-    "timestamp": datetime.now(timezone.utc).isoformat(),
-    "status": "sent"
-  }
-  
-  if id not in MOCK_MESSAGES:
-    MOCK_MESSAGES[id] = []
-  
-  MOCK_MESSAGES[id].append(new_msg)
-  conv["last_message"] = message_data.content
-  conv["last_message_time"] = datetime.now(timezone.utc).strftime("%H:%M")
-  
-  return new_msg
-Post = send_message
+@router.get("/seed-demo")
+def seed_demo_conversations(db: Session = Depends(get_db)):
+    contacts = db.query(Contact).all()
+    created = 0
+
+    for contact in contacts:
+        existing = db.query(Conversation).filter(Conversation.contact_id == contact.id).first()
+        if existing:
+            continue
+
+        convo = Conversation(
+            contact_id=contact.id,
+            channel="whatsapp",
+            status="open",
+            unread_count=1,
+            last_message_preview=f"Hi {contact.full_name}, thanks for reaching out!",
+            last_message_at=datetime.now(timezone.utc),
+        )
+        db.add(convo)
+        db.flush()
+
+        msg1 = Message(
+            conversation_id=convo.id,
+            sender_type="customer",
+            message_text="Hi, I'm interested in your service.",
+            message_type="text",
+        )
+        msg2 = Message(
+            conversation_id=convo.id,
+            sender_type="agent",
+            message_text=f"Hi {contact.full_name}, thanks for reaching out! How can I help you?",
+            message_type="text",
+        )
+        db.add(msg1)
+        db.add(msg2)
+        created += 1
+
+    db.commit()
+    return {"created_conversations": created}
+
+
+@router.get("/{conversation_id}", response_model=ConversationDetailResponse)
+def get_conversation(conversation_id: str, db: Session = Depends(get_db)):
+    conversation = get_conversation_by_id(db, conversation_id)
+    if not conversation:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+
+    messages = get_messages_for_conversation(db, conversation_id)
+
+    return ConversationDetailResponse(
+        id=conversation.id,
+        contact_id=conversation.contact_id,
+        channel=conversation.channel,
+        status=conversation.status,
+        unread_count=conversation.unread_count,
+        last_message_preview=conversation.last_message_preview,
+        last_message_at=conversation.last_message_at.isoformat() if conversation.last_message_at else None,
+        created_at=conversation.created_at.isoformat() if conversation.created_at else "",
+        updated_at=conversation.updated_at.isoformat() if conversation.updated_at else "",
+        messages=[
+            MessageResponse(
+                id=msg.id,
+                conversation_id=msg.conversation_id,
+                sender_type=msg.sender_type,
+                sender_id=msg.sender_id,
+                message_text=msg.message_text,
+                message_type=msg.message_type,
+                created_at=msg.created_at.isoformat() if msg.created_at else "",
+            )
+            for msg in messages
+        ],
+    )
+
+
+@router.post("/{conversation_id}/messages", response_model=MessageResponse)
+def send_message(conversation_id: str, payload: MessageCreate, db: Session = Depends(get_db)):
+    message = create_message(db, conversation_id, payload)
+    if not message:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+
+    return MessageResponse(
+        id=message.id,
+        conversation_id=message.conversation_id,
+        sender_type=message.sender_type,
+        sender_id=message.sender_id,
+        message_text=message.message_text,
+        message_type=message.message_type,
+        created_at=message.created_at.isoformat() if message.created_at else "",
+    )

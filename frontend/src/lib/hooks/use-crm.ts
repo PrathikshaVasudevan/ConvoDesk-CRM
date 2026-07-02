@@ -1,61 +1,91 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api/client';
-import { 
-  MOCK_CONTACTS, 
-  MOCK_CONVERSATIONS, 
-  MOCK_MESSAGES, 
-  MOCK_FOLLOWUPS, 
-  MOCK_STATS 
-} from '../../data/mock-data';
-import { useState } from 'react';
 import { Contact, Conversation, Message, FollowUp } from '@/types';
+
+// ---- Contacts ----
 
 export function useContacts() {
   return useQuery<Contact[]>({
     queryKey: ['contacts'],
-    queryFn: async () => {
-      try {
-        return await api.contacts.list() as Contact[];
-      } catch (err) {
-        console.warn('API error, falling back to mock contacts:', err);
-        return MOCK_CONTACTS;
-      }
-    },
-    initialData: MOCK_CONTACTS,
+    queryFn: () => api.contacts.list(),
   });
 }
+
+export function useCreateContact() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: {
+      name: string;
+      phone: string;
+      email?: string;
+      status?: string;
+      priority?: string;
+      lead_classification?: string;
+    }) => api.contacts.create(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['contacts'] });
+    },
+  });
+}
+
+export function useUpdateContact() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      id,
+      data,
+    }: {
+      id: string;
+      data: {
+        name?: string;
+        phone?: string;
+        email?: string;
+        status?: string;
+        priority?: string;
+        lead_classification?: string;
+      };
+    }) => api.contacts.update(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['contacts'] });
+    },
+  });
+}
+
+// ---- Conversations ----
 
 export function useConversations() {
   return useQuery<Conversation[]>({
     queryKey: ['conversations'],
-    queryFn: async () => {
-      try {
-        return await api.conversations.list() as Conversation[];
-      } catch (err) {
-        console.warn('API error, falling back to mock conversations:', err);
-        return MOCK_CONVERSATIONS;
-      }
-    },
-    initialData: MOCK_CONVERSATIONS,
+    queryFn: () => api.conversations.list(),
+    initialData: [],
   });
 }
 
 export function useMessages(conversationId: string | null) {
   return useQuery<Message[]>({
     queryKey: ['messages', conversationId],
-    queryFn: async () => {
-      if (!conversationId) return [];
-      try {
-        return await api.conversations.getMessages(conversationId) as Message[];
-      } catch (err) {
-        console.warn(`API error, falling back to mock messages for ${conversationId}:`, err);
-        return MOCK_MESSAGES[conversationId] || [];
-      }
+    queryFn: () => {
+      if (!conversationId) return Promise.resolve([]);
+      return api.conversations.getMessages(conversationId);
     },
     enabled: !!conversationId,
-    initialData: conversationId ? (MOCK_MESSAGES[conversationId] || []) : [],
+    initialData: [],
   });
 }
+
+export function useSendMessage() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ conversationId, content }: { conversationId: string; content: string }) =>
+      api.conversations.sendMessage(conversationId, content),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['messages', variables.conversationId] });
+      queryClient.invalidateQueries({ queryKey: ['conversations'] });
+    },
+  });
+}
+
+// ---- Follow-ups ----
 
 export function useFollowUps() {
   const queryClient = useQueryClient();
@@ -63,82 +93,81 @@ export function useFollowUps() {
   const query = useQuery<FollowUp[]>({
     queryKey: ['followups'],
     queryFn: async () => {
-      try {
-        return await api.followups.list() as FollowUp[];
-      } catch (err) {
-        console.warn('API error, falling back to mock follow-ups:', err);
-        return MOCK_FOLLOWUPS;
-      }
-    },
-    initialData: MOCK_FOLLOWUPS,
-  });
+      const followups = await api.followups.list();
+      const contacts = await api.contacts.list();
 
-  // Local state helper to make UI instant and interactive
-  const [localFollowUps, setLocalFollowUps] = useState<FollowUp[]>(MOCK_FOLLOWUPS);
+      return followups.map((followup) => {
+        const contact = contacts.find((c) => c.id === followup.contactId);
+        return {
+          ...followup,
+          contactName: contact?.name || 'Unknown Contact',
+        };
+      });
+    },
+  });
 
   const toggleMutation = useMutation({
     mutationFn: async (id: string) => {
-      try {
-        return await api.followups.toggleStatus(id);
-      } catch (err) {
-        console.warn('API error toggle, applying mock toggle locally:', err);
-        setLocalFollowUps(prev => 
-          prev.map(f => f.id === id ? { ...f, status: f.status === 'completed' ? 'pending' : 'completed' } : f)
-        );
-        return { success: true };
-      }
+      const current = query.data?.find((item) => item.id === id);
+      const nextStatus = current?.status === 'completed' ? 'pending' : 'completed';
+      return api.followups.updateStatus(id, nextStatus);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['followups'] });
-    }
+    },
   });
 
   return {
     ...query,
-    data: query.data || localFollowUps,
+    data: query.data || [],
     toggleStatus: toggleMutation.mutateAsync,
+    isToggling: toggleMutation.isPending,
   };
 }
+
+export function useCreateFollowUp() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: {
+      contact_id: string;
+      task: string;
+      due_date: string;
+      priority: string;
+    }) => api.followups.create(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['followups'] });
+    },
+  });
+}
+
+// ---- Analytics ----
 
 export function useAnalyticsStats() {
   return useQuery<any>({
     queryKey: ['analytics-stats'],
-    queryFn: async () => {
-      try {
-        return await api.analytics.getStats();
-      } catch (err) {
-        console.warn('API error, falling back to mock stats:', err);
-        return MOCK_STATS;
-      }
+    queryFn: () => api.analytics.getStats(),
+    initialData: {
+      totalLeads: 0,
+      activeChats: 0,
+      pendingFollowups: 0,
+      conversionRate: 0,
+      pipelineValue: '$0',
+      chatsByDay: [],
+      leadsByStatus: [],
     },
-    initialData: MOCK_STATS,
   });
 }
 
+// ---- AI ----
 
 export function useAISummary() {
   return useMutation({
-    mutationFn: async (conversationId: string) => {
-      try {
-        return await api.ai.getSummary(conversationId);
-      } catch (err) {
-        console.warn('API AI Summary error, returning mock summary:', err);
-        const conv = MOCK_CONVERSATIONS.find(c => c.id === conversationId);
-        return { summary: conv?.summary || 'No summary available.' };
-      }
-    }
+    mutationFn: (conversationId: string) => api.ai.getSummary(conversationId),
   });
 }
 
 export function useAIReplySuggestion() {
   return useMutation({
-    mutationFn: async (conversationId: string) => {
-      try {
-        return await api.ai.getReplySuggestion(conversationId);
-      } catch (err) {
-        console.warn('API AI Reply error, returning mock reply:', err);
-        return { suggestion: "Sure, let me check our documentation to see if timezone routing is supported. I will send you the guide shortly." };
-      }
-    }
+    mutationFn: (conversationId: string) => api.ai.getReplySuggestion(conversationId),
   });
 }

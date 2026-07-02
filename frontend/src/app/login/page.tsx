@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Sparkles, ArrowRight, Lock, Mail, MessageSquare } from 'lucide-react';
 import { loginSchema } from '@/lib/validations/schemas';
+import { api } from '@/lib/api/client';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -12,7 +13,7 @@ export default function LoginPage() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     
@@ -23,11 +24,16 @@ export default function LoginPage() {
     }
 
     setLoading(true);
-    // Mock login delay
-    setTimeout(() => {
-      setLoading(false);
+    try {
+      const res = await api.auth.login({ email, password });
+      // Store token for authenticated API calls
+      localStorage.setItem('convodesk_token', res.access_token);
       router.push('/dashboard');
-    }, 800);
+    } catch (err: any) {
+      setError('Invalid email or password. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -110,7 +116,7 @@ export default function LoginPage() {
             </div>
             <div className="text-zinc-500 text-xs leading-relaxed">
               <p className="font-semibold text-zinc-400">Demo Mode Access</p>
-              <p>Use any valid email (e.g., <code className="text-zinc-300">alex@convodesk.crm</code>) and a 6+ char password to authenticate.</p>
+              <p>Use email <code className="text-zinc-300 font-bold">admin@convodesk.com</code> and password <code className="text-zinc-300 font-bold">password123</code> to authenticate.</p>
             </div>
           </div>
         </div>

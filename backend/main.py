@@ -1,36 +1,24 @@
-import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.core.config import settings
-from app.api.routes import api_router
+from app.api.api_router import api_router
+from app.db.session import Base, engine
+from app.models import *
 
-app = FastAPI(
-  title=settings.PROJECT_NAME,
-  version=settings.VERSION,
-  docs_url="/docs",
-  redoc_url="/redoc"
-)
+Base.metadata.create_all(bind=engine)
 
-# CORS configuration to allow local frontend connection
+app = FastAPI(title="ConvoDesk CRM API")
+
 app.add_middleware(
-  CORSMiddleware,
-  allow_origins=["*"],  # For development. Limit to specific origin in production.
-  allow_credentials=True,
-  allow_methods=["*"],
-  allow_headers=["*"],
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
-# Include central router
-app.include_router(api_router, prefix=settings.API_V1_STR)
+app.include_router(api_router)
+
 
 @app.get("/")
-async def root():
-  return {
-    "status": "online",
-    "project": settings.PROJECT_NAME,
-    "version": settings.VERSION,
-    "api_docs": "/docs"
-  }
-
-if __name__ == "__main__":
-  uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+def root():
+    return {"message": "ConvoDesk CRM API running"}

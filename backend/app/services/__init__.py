@@ -1,30 +1,29 @@
-class WhatsAppService:
-  """
-  Service to interface with Meta's WhatsApp Business Cloud API.
-  Handles sending templates, text messages, media, and managing webhook payloads.
-  """
-  @staticmethod
-  async def send_text_message(to_phone: str, text: str) -> dict:
-    # Placeholder for Meta REST API call
-    return {"status": "mock_sent", "recipient": to_phone, "content": text}
+from .contact_service import get_contacts, get_contact_by_id, create_contact, update_contact
+from .conversation_service import (
+    get_conversations,
+    get_conversation_by_id,
+    get_messages_for_conversation,
+    create_message,
+)
+from .followup_service import get_followups, get_followup_by_id, create_followup, update_followup
+from .analytics_service import get_dashboard_metrics
+from .ai_service import summarize_conversation, classify_lead, suggest_reply
 
-  @staticmethod
-  async def send_template_message(to_phone: str, template_name: str, language_code: str = "en_US") -> dict:
-    # Placeholder for template delivery
-    return {"status": "mock_template_sent", "template": template_name}
-
-
-class GeminiService:
-  """
-  Service to interact with Google's Gemini Pro API.
-  Handles conversation summarizing, priority suggestions, and lead intent categorization.
-  """
-  @staticmethod
-  async def summarize_chat(chat_history_texts: list[str]) -> str:
-    # Placeholder for Gemini generative summarizing
-    return "Sarah is evaluating API integrations for a customer support team."
-
-  @staticmethod
-  async def classify_intent(message_content: str) -> str:
-    # Placeholder for intent classification
-    return "Hot"
+__all__ = [
+    "get_contacts",
+    "get_contact_by_id",
+    "create_contact",
+    "update_contact",
+    "get_conversations",
+    "get_conversation_by_id",
+    "get_messages_for_conversation",
+    "create_message",
+    "get_followups",
+    "get_followup_by_id",
+    "create_followup",
+    "update_followup",
+    "get_dashboard_metrics",
+    "summarize_conversation",
+    "classify_lead",
+    "suggest_reply",
+]
