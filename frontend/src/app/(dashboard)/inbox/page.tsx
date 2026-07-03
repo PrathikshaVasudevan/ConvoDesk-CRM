@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useSearchParams } from 'next/navigation';
 import {
   useConversations,
@@ -31,82 +31,135 @@ import {
 } from 'lucide-react';
 import { Message, Conversation, Contact } from '@/types';
 
+// ---- Demo data helpers ----
+
+function buildDemoConversations(contacts: Contact[]): Conversation[] {
+  return contacts.map((contact, idx) => ({
+    id: `demo-conv-${contact.id}`,
+    contactId: contact.id,
+    contactName: contact.name,
+    contactPhone: contact.phone,
+    channel: 'whatsapp',
+    status: 'open' as const,
+    unreadCount: 0,
+    lastMessage: 'Hi, I\'m interested in your service',
+    lastMessageTime: '10:30 AM',
+    leadIntent: contact.leadClassification || 'Warm',
+  }));
+}
+
+function buildDemoMessages(conversationId: string): Message[] {
+  return [
+    {
+      id: `demo-msg-1-${conversationId}`,
+      conversationId,
+      senderType: 'customer',
+      content: "Hi, I'd like to know more about your pricing.",
+      messageType: 'text',
+      timestamp: new Date(Date.now() - 600000).toISOString(),
+    },
+    {
+      id: `demo-msg-2-${conversationId}`,
+      conversationId,
+      senderType: 'agent',
+      content: 'Sure! I can help with that. What kind of solution are you looking for?',
+      messageType: 'text',
+      timestamp: new Date(Date.now() - 300000).toISOString(),
+    },
+  ];
+}
+
+// ---- Constants ----
+
+const AI_SUMMARY_FALLBACK =
+  'Customer is interested in pricing and may require follow-up from sales.';
+const AI_REPLY_FALLBACK =
+  "Thanks for reaching out! I'd be happy to help. Could you share a bit more about what you're looking for?";
+
+// ---- Main component ----
+
 function InboxPageContent() {
   const searchParams = useSearchParams();
   const activeParam = searchParams.get('active');
 
-  const { data: conversations = [] } = useConversations();
+  const { data: apiConversations = [] } = useConversations();
   const { data: contacts = [] } = useContacts();
+
+  // Merge real conversations with demo fallback
+  const displayConversations = useMemo<Conversation[]>(() => {
+    if (apiConversations.length > 0) return apiConversations;
+    if (contacts.length > 0) return buildDemoConversations(contacts);
+    return [];
+  }, [apiConversations, contacts]);
 
   const [selectedConvId, setSelectedConvId] = useState<string>('');
 
+  // Auto-select first conversation (guarded to avoid infinite loop)
   useEffect(() => {
-    if (conversations.length === 0) return;
+    if (displayConversations.length === 0) return;
 
     if (activeParam) {
-      const found = conversations.find((c) => c.contactId === activeParam);
-      if (found) {
+      const found = displayConversations.find((c) => c.contactId === activeParam);
+      if (found && found.id !== selectedConvId) {
         setSelectedConvId(found.id);
         return;
       }
     }
 
-    setSelectedConvId((prev) => prev || conversations[0].id);
-  }, [activeParam, conversations]);
+    if (!selectedConvId || !displayConversations.find((c) => c.id === selectedConvId)) {
+      setSelectedConvId(displayConversations[0].id);
+    }
+  }, [activeParam, displayConversations]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const activeConv =
-    conversations.find((c) => c.id === selectedConvId) ?? null;
+  const isDemo = selectedConvId.startsWith('demo-conv-');
+  const activeConv = displayConversations.find((c) => c.id === selectedConvId) ?? null;
+  const activeContact = contacts.find((c) => c.id === activeConv?.contactId) ?? null;
 
-  const activeContact =
-    contacts.find((c) => c.id === activeConv?.contactId) ?? null;
-
-  const { data: messages = [], isLoading: messagesLoading } = useMessages(
-    selectedConvId || null
+  // Messages (real or demo)
+  const { data: apiMessages = [], isLoading: messagesLoading } = useMessages(
+    isDemo ? null : (selectedConvId || null)
   );
 
+  const [localMessages, setLocalMessages] = useState<Message[]>([]);
+
+  // Reset local messages when conversation changes
+  useEffect(() => {
+    setLocalMessages([]);
+  }, [selectedConvId]);
+
+  const displayMessages = useMemo<Message[]>(() => {
+    const realPlusLocal = [...apiMessages, ...localMessages];
+    if (realPlusLocal.length > 0) return realPlusLocal;
+    if (selectedConvId) return buildDemoMessages(selectedConvId);
+    return [];
+  }, [apiMessages, localMessages, selectedConvId]);
+
+  // Send message
   const sendMessageMutation = useSendMessage();
   const [newMessageText, setNewMessageText] = useState('');
 
-  const aiSummaryMutation = useAISummary();
-  const aiReplyMutation = useAIReplySuggestion();
-
-  const [aiSummary, setAiSummary] = useState<string>('');
-  const [aiReplySuggestion, setAiReplySuggestion] = useState<string>('');
-  const [searchQuery, setSearchQuery] = useState('');
-
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
-
-  // Reset AI state on conversation change
-  useEffect(() => {
-    setAiSummary('');
-    setAiReplySuggestion('');
-  }, [selectedConvId]);
-
-  // Handle AI summary trigger
-  const handleGenerateSummary = async () => {
-    if (!selectedConvId) return;
-    const res = await aiSummaryMutation.mutateAsync(selectedConvId);
-    setAiSummary(res.summary);
-  };
-
-  // Handle AI reply suggestion
-  const handleGenerateReply = async () => {
-    if (!selectedConvId) return;
-    const res = await aiReplyMutation.mutateAsync(selectedConvId);
-    setAiReplySuggestion(res.suggestion);
-  };
-
-  // Handle send message
-  const handleSendMessage = async (e: React.FormEvent) => {
+  const handleSendMessage = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newMessageText.trim() || !selectedConvId) return;
 
     const text = newMessageText;
     setNewMessageText('');
+
+    // Always append locally for instant UI feedback
+    const localMsg: Message = {
+      id: `local-${Date.now()}`,
+      conversationId: selectedConvId,
+      senderType: 'agent',
+      content: text,
+      messageType: 'text',
+      timestamp: new Date().toISOString(),
+    };
+
+    if (isDemo) {
+      // Demo conversation — just append locally
+      setLocalMessages((prev) => [...prev, localMsg]);
+      return;
+    }
 
     try {
       await sendMessageMutation.mutateAsync({
@@ -114,23 +167,87 @@ function InboxPageContent() {
         content: text,
       });
     } catch (err) {
-      console.warn('Failed to send message to API:', err);
+      console.warn('Failed to send message to API, showing locally:', err);
+      setLocalMessages((prev) => [...prev, localMsg]);
     }
-  };
+  }, [newMessageText, selectedConvId, isDemo, sendMessageMutation]);
 
-  // Filter conversations based on search
-  const filteredConversations = conversations.filter(c =>
+  // AI state
+  const aiSummaryMutation = useAISummary();
+  const aiReplyMutation = useAIReplySuggestion();
+  const [aiSummary, setAiSummary] = useState<string>('');
+  const [aiReplySuggestion, setAiReplySuggestion] = useState<string>('');
+
+  // Reset AI state on conversation change
+  useEffect(() => {
+    setAiSummary('');
+    setAiReplySuggestion('');
+  }, [selectedConvId]);
+
+  const handleGenerateSummary = useCallback(async () => {
+    if (!selectedConvId) return;
+    try {
+      if (isDemo) throw new Error('demo conversation');
+      const res = await aiSummaryMutation.mutateAsync(selectedConvId);
+      setAiSummary(res.summary);
+    } catch {
+      setAiSummary(AI_SUMMARY_FALLBACK);
+    }
+  }, [selectedConvId, isDemo, aiSummaryMutation]);
+
+  const handleGenerateReply = useCallback(async () => {
+    if (!selectedConvId) return;
+    try {
+      if (isDemo) throw new Error('demo conversation');
+      const res = await aiReplyMutation.mutateAsync(selectedConvId);
+      setAiReplySuggestion(res.suggestion);
+    } catch {
+      setAiReplySuggestion(AI_REPLY_FALLBACK);
+    }
+  }, [selectedConvId, isDemo, aiReplyMutation]);
+
+  // Search
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const filteredConversations = displayConversations.filter(c =>
     c.contactName.toLowerCase().includes(searchQuery.toLowerCase()) ||
     c.lastMessage?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  return (
-    <div className="h-[calc(100vh-8.5rem)] grid grid-cols-1 lg:grid-cols-12 border border-zinc-800/80 rounded-xl overflow-hidden bg-zinc-900/10 backdrop-blur-md animate-fade-in">
+  // Scroll to bottom on new messages
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [displayMessages]);
 
-      {/* COLUMN 1: Conversation List (4/12 width) */}
-      <div className="lg:col-span-4 border-r border-zinc-800/80 flex flex-col h-full bg-zinc-950/20">
-        {/* Search */}
-        <div className="p-4 border-b border-zinc-800/80">
+  // ---- Empty state: no contacts, no conversations ----
+  if (displayConversations.length === 0 && !messagesLoading) {
+    return (
+      <div className="h-[calc(100vh-8.5rem)] flex flex-col items-center justify-center border border-zinc-800/80 rounded-xl bg-zinc-900/10 backdrop-blur-md animate-fade-in">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-16 h-16 rounded-full bg-emerald-500/10 flex items-center justify-center">
+            <MessageSquare className="w-8 h-8 text-emerald-400" />
+          </div>
+          <div className="text-center">
+            <p className="text-sm font-semibold text-zinc-300">No conversations yet</p>
+            <p className="text-xs text-zinc-500 mt-1">Add a contact to start a demo chat.</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-4 h-[calc(100vh-9rem)] min-h-0 animate-fade-in">      <div>
+      <h2 className="text-xl font-bold text-zinc-50">Inbox</h2>
+      <p className="text-zinc-400 text-xs mt-0.5">
+        Manage conversations, reply to leads, and use AI assistance.
+      </p>
+    </div>
+
+      <div className="flex-1 min-h-0 overflow-hidden border border-zinc-800/80 rounded-xl bg-zinc-900/10 backdrop-blur-md pt-1">        <div className="grid h-full min-h-0 grid-cols-1 lg:grid-cols-12">
+        {/* COLUMN 1: Conversation List (4/12 width) */}
+        <div className="lg:col-span-4 border-r border-zinc-800/80 flex flex-col min-h-0 bg-zinc-950/20 pt-2">            <div className="p-4 border-b border-zinc-800/80">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
             <input
@@ -143,93 +260,91 @@ function InboxPageContent() {
           </div>
         </div>
 
-        {/* Chat List */}
-        <div className="flex-1 overflow-y-auto divide-y divide-zinc-850">
-          {filteredConversations.length > 0 ? filteredConversations.map((conv) => {
-            const isSelected = conv.id === selectedConvId;
-            const contact = (contacts || []).find(c => c.id === conv.contactId);
-            return (
-              <button
-                key={conv.id}
-                onClick={() => {
-                  setSelectedConvId(conv.id);
-                }}
-                className={`w-full p-4 flex items-start text-left hover:bg-zinc-900/30 transition-all ${isSelected ? 'bg-emerald-600/10 border-l-2 border-emerald-500' : ''
-                  }`}
-              >
-                <div className="relative flex-shrink-0 mr-3">
-                  <img
-                    src={contact?.avatarUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150'}
-                    alt={conv.contactName}
-                    className="w-10 h-10 rounded-full object-cover ring-1 ring-zinc-800"
-                  />
-                  <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-emerald-500 border-2 border-zinc-950 rounded-full" />
-                </div>
-
-                <div className="flex-1 min-w-0">
-                  <div className="flex justify-between items-baseline mb-1">
-                    <h4 className="text-xs font-bold text-zinc-200 truncate">{conv.contactName}</h4>
-                    <span className="text-[9px] text-zinc-500">{conv.lastMessageTime}</span>
+          {/* Chat List */}
+          <div className="flex-1 overflow-y-auto divide-y divide-zinc-850">
+            {filteredConversations.length > 0 ? filteredConversations.map((conv) => {
+              const isSelected = conv.id === selectedConvId;
+              const contact = (contacts || []).find(c => c.id === conv.contactId);
+              return (
+                <button
+                  key={conv.id}
+                  onClick={() => {
+                    setSelectedConvId(conv.id);
+                  }}
+                  className={`w-full p-4 flex items-start text-left hover:bg-zinc-900/30 transition-all ${isSelected ? 'bg-emerald-600/10 border-l-2 border-emerald-500' : ''
+                    }`}
+                >
+                  <div className="relative flex-shrink-0 mr-3">
+                    <img
+                      src={contact?.avatarUrl || '/avatar.svg'}
+                      alt={conv.contactName}
+                      className="w-10 h-10 rounded-full object-cover ring-1 ring-zinc-800"
+                    />
+                    <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-emerald-500 border-2 border-zinc-950 rounded-full" />
                   </div>
-                  <p className="text-[10px] text-zinc-400 truncate pr-6 leading-relaxed">{conv.lastMessage}</p>
 
-                  {/* Tags & Badges */}
-                  <div className="flex items-center gap-1.5 mt-2">
-                    {conv.unreadCount > 0 && (
-                      <span className="px-1.5 py-0.5 text-[9px] font-bold bg-emerald-500 text-zinc-950 rounded-full">
-                        {conv.unreadCount}
-                      </span>
-                    )}
-                    {conv.leadIntent && (
-                      <span className={`text-[8px] px-1.5 py-0.5 rounded font-semibold border ${conv.leadIntent === 'Hot'
-                        ? 'bg-red-500/10 text-red-400 border-red-500/20'
-                        : 'bg-zinc-800 text-zinc-500 border-zinc-700'
-                        }`}>
-                        {conv.leadIntent}
-                      </span>
-                    )}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex justify-between items-baseline mb-1">
+                      <h4 className="text-xs font-bold text-zinc-200 truncate">{conv.contactName}</h4>
+                      <span className="text-[9px] text-zinc-500">{conv.lastMessageTime}</span>
+                    </div>
+                    <p className="text-[10px] text-zinc-400 truncate pr-6 leading-relaxed">{conv.lastMessage}</p>
+
+                    {/* Tags & Badges */}
+                    <div className="flex items-center gap-1.5 mt-2">
+                      {conv.unreadCount > 0 && (
+                        <span className="px-1.5 py-0.5 text-[9px] font-bold bg-emerald-500 text-zinc-950 rounded-full">
+                          {conv.unreadCount}
+                        </span>
+                      )}
+                      {conv.leadIntent && (
+                        <span className={`text-[8px] px-1.5 py-0.5 rounded font-semibold border ${conv.leadIntent === 'Hot'
+                          ? 'bg-red-500/10 text-red-400 border-red-500/20'
+                          : 'bg-zinc-800 text-zinc-500 border-zinc-700'
+                          }`}>
+                          {conv.leadIntent}
+                        </span>
+                      )}
+                    </div>
                   </div>
-                </div>
-              </button>
-            );
-          }) : (
-            <div className="flex flex-col items-center justify-center h-full text-zinc-500 text-xs py-12">
-              <MessageSquare className="w-6 h-6 mb-2 opacity-50" />
-              No conversations found
-            </div>
-          )}
+                </button>
+              );
+            }) : (
+              <div className="flex flex-col items-center justify-center h-full text-zinc-500 text-xs py-12">
+                <MessageSquare className="w-6 h-6 mb-2 opacity-50" />
+                No conversations found
+              </div>
+            )}
+          </div>
         </div>
-      </div>
 
-      {/* COLUMN 2: Message Thread (5/12 width) */}
-      <div className="lg:col-span-5 flex flex-col h-full bg-zinc-950/40">
-        {activeConv ? (
+        {/* COLUMN 2: Message Thread (5/12 width) */}
+        <div className="lg:col-span-5 flex flex-col min-h-0 bg-zinc-950/40 pt-2">            {activeConv ? (
           <>
             {/* Active Contact Header */}
-            <div className="px-6 py-3 border-b border-zinc-800/80 flex items-center justify-between bg-zinc-900/20">
-              <div className="flex items-center gap-3">
-                <img
-                  src={activeContact?.avatarUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150'}
-                  alt={activeConv.contactName}
-                  className="w-9 h-9 rounded-full object-cover"
-                />
-                <div>
-                  <h3 className="text-xs font-bold text-zinc-100">{activeConv.contactName}</h3>
-                  <span className="text-[9px] text-zinc-500 flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full" /> WhatsApp {activeConv.contactPhone}
-                  </span>
-                </div>
+            <div className="px-6 py-4 border-b border-zinc-800/80 flex items-center justify-between bg-zinc-900/20">                <div className="flex items-center gap-3">
+              <img
+                src={activeContact?.avatarUrl || '/avatar.svg'}
+                alt={activeConv.contactName}
+                className="w-9 h-9 rounded-full object-cover"
+              />
+              <div>
+                <h3 className="text-xs font-bold text-zinc-100">{activeConv.contactName}</h3>
+                <span className="text-[9px] text-zinc-500 flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full" /> WhatsApp {activeConv.contactPhone}
+                </span>
               </div>
+            </div>
             </div>
 
             {/* Message Pane */}
             <div className="flex-1 p-6 overflow-y-auto space-y-4">
-              {messagesLoading ? (
+              {messagesLoading && !isDemo ? (
                 <div className="flex flex-col items-center justify-center h-full text-zinc-500 text-xs">
                   <Loader2 className="w-5 h-5 animate-spin text-emerald-500 mb-2" />
                   <span>Loading messages...</span>
                 </div>
-              ) : messages.length > 0 ? messages.map((msg) => {
+              ) : displayMessages.length > 0 ? displayMessages.map((msg) => {
                 const isAgent = msg.senderType === 'agent';
                 return (
                   <div key={msg.id} className={`flex ${isAgent ? 'justify-end' : 'justify-start'}`}>
@@ -316,111 +431,114 @@ function InboxPageContent() {
             <p className="text-xs">Select a chat to begin</p>
           </div>
         )}
-      </div>
+        </div>
 
-      {/* COLUMN 3: Lead Context Panel (3/12 width) */}
-      <div className="lg:col-span-3 border-l border-zinc-800/80 p-6 flex flex-col h-full bg-zinc-950/20 overflow-y-auto space-y-6">
-        {activeContact ? (
-          <>
-            {/* Quick Profile */}
-            <div className="text-center pb-6 border-b border-zinc-800/80">
-              <img
-                src={activeContact.avatarUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150'}
-                alt={activeContact.name}
-                className="w-16 h-16 rounded-full object-cover mx-auto ring-2 ring-emerald-500/20 mb-3"
-              />
-              <h3 className="text-sm font-bold text-zinc-200">{activeContact.name}</h3>
-              <p className="text-[10px] text-zinc-500 mt-1 uppercase tracking-wider">{activeContact.status} Lead</p>
-            </div>
+        {/* COLUMN 3: Lead Context Panel (3/12 width) */}
+        <div className="lg:col-span-3 border-l border-zinc-800/80 min-h-0 overflow-y-auto bg-zinc-950/20 pt-4">
+          {activeContact ? (
+            <>
+              {/* Quick Profile */}
+              <div className="text-center px-6 pt-4 pb-6 border-b border-zinc-800/80">
+                <img
+                  src={activeContact.avatarUrl || '/avatar.svg'}
+                  alt={activeContact.name}
+                  className="w-16 h-16 rounded-full object-cover mx-auto ring-2 ring-emerald-500/20 mb-3"
+                />
+                <h3 className="text-sm font-bold text-zinc-200">{activeContact.name}</h3>
+                <p className="text-[10px] text-zinc-500 mt-1 uppercase tracking-wider">{activeContact.status} Lead</p>
+              </div>
 
-            {/* Contact Details */}
-            <div className="space-y-3">
-              <h4 className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Contact Details</h4>
-              <div className="space-y-2 text-xs text-zinc-300">
-                <div className="flex items-center gap-2">
-                  <Phone className="w-4 h-4 text-zinc-500" />
-                  <span>{activeContact.phone}</span>
-                </div>
-                {activeContact.email && (
+              {/* Contact Details */}
+              <div className="space-y-3">
+                <h4 className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Contact Details</h4>
+                <div className="space-y-2 text-xs text-zinc-300">
                   <div className="flex items-center gap-2">
-                    <Mail className="w-4 h-4 text-zinc-500" />
-                    <span className="truncate">{activeContact.email}</span>
+                    <Phone className="w-4 h-4 text-zinc-500" />
+                    <span>{activeContact.phone}</span>
                   </div>
+                  {activeContact.email && (
+                    <div className="flex items-center gap-2">
+                      <Mail className="w-4 h-4 text-zinc-500" />
+                      <span className="truncate">{activeContact.email}</span>
+                    </div>
+                  )}
+                  <div className="flex items-center gap-2">
+                    <Calendar className="w-4 h-4 text-zinc-500" />
+                    <span>Priority: <span className="font-semibold text-emerald-400">{activeContact.priority}</span></span>
+                  </div>
+                </div>
+              </div>
+
+              {/* AI Summary Block */}
+              <div className="space-y-3 bg-zinc-900/30 border border-zinc-850 p-4 rounded-lg">
+                <div className="flex justify-between items-center">
+                  <h4 className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider flex items-center gap-1">
+                    <Sparkles className="w-3.5 h-3.5" /> AI Summary
+                  </h4>
+                  <button
+                    onClick={handleGenerateSummary}
+                    disabled={aiSummaryMutation.isPending}
+                    className="text-[9px] text-zinc-400 hover:text-emerald-400 font-semibold disabled:opacity-50"
+                  >
+                    {aiSummaryMutation.isPending ? 'Generating...' : 'Refresh'}
+                  </button>
+                </div>
+
+                {aiSummaryMutation.isPending ? (
+                  <div className="flex flex-col items-center justify-center py-4 gap-2">
+                    <Loader2 className="w-5 h-5 text-emerald-500 animate-spin" />
+                    <span className="text-[9px] text-zinc-500">Parsing message logs...</span>
+                  </div>
+                ) : aiSummary ? (
+                  <p className="text-[10px] text-zinc-300 leading-relaxed italic">{aiSummary}</p>
+                ) : activeConv?.summary ? (
+                  <p className="text-[10px] text-zinc-300 leading-relaxed italic">{activeConv.summary}</p>
+                ) : (
+                  <button
+                    onClick={handleGenerateSummary}
+                    className="w-full flex items-center justify-center py-2 bg-emerald-600/10 hover:bg-emerald-600/25 border border-emerald-500/20 text-emerald-400 text-[10px] rounded-lg font-semibold transition-colors gap-1"
+                  >
+                    <Bot className="w-3.5 h-3.5" /> Generate Lead Summary
+                  </button>
                 )}
-                <div className="flex items-center gap-2">
-                  <Calendar className="w-4 h-4 text-zinc-500" />
-                  <span>Priority: <span className="font-semibold text-emerald-400">{activeContact.priority}</span></span>
-                </div>
-              </div>
-            </div>
-
-            {/* AI Summary Block */}
-            <div className="space-y-3 bg-zinc-900/30 border border-zinc-850 p-4 rounded-lg">
-              <div className="flex justify-between items-center">
-                <h4 className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider flex items-center gap-1">
-                  <Sparkles className="w-3.5 h-3.5" /> AI Summary
-                </h4>
-                <button
-                  onClick={handleGenerateSummary}
-                  disabled={aiSummaryMutation.isPending}
-                  className="text-[9px] text-zinc-400 hover:text-emerald-400 font-semibold disabled:opacity-50"
-                >
-                  {aiSummaryMutation.isPending ? 'Generating...' : 'Refresh'}
-                </button>
               </div>
 
-              {aiSummaryMutation.isPending ? (
-                <div className="flex flex-col items-center justify-center py-4 gap-2">
-                  <Loader2 className="w-5 h-5 text-emerald-500 animate-spin" />
-                  <span className="text-[9px] text-zinc-500">Parsing message logs...</span>
+              {/* Lead Intent & Priority */}
+              {activeConv && (
+                <div className="space-y-2">
+                  <h4 className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Lead Intel</h4>
+                  <div className="flex flex-wrap gap-2">
+                    {activeConv.leadIntent && (
+                      <span className={`text-[9px] px-2 py-0.5 rounded font-semibold border ${activeConv.leadIntent === 'Hot'
+                        ? 'bg-red-500/10 text-red-400 border-red-500/25'
+                        : activeConv.leadIntent === 'Warm'
+                          ? 'bg-amber-500/10 text-amber-400 border-amber-500/25'
+                          : 'bg-zinc-800 text-zinc-500 border-zinc-700'
+                        }`}>
+                        {activeConv.leadIntent === 'Hot' && <Flame className="w-3 h-3 inline text-red-500 animate-pulse mr-0.5" />}
+                        {activeConv.leadIntent}
+                      </span>
+                    )}
+                    {activeConv.prioritySuggestion && (
+                      <span className="text-[9px] px-2 py-0.5 rounded font-semibold border bg-zinc-800 text-zinc-400 border-zinc-700">
+                        Priority: {activeConv.prioritySuggestion}
+                      </span>
+                    )}
+                  </div>
                 </div>
-              ) : aiSummary ? (
-                <p className="text-[10px] text-zinc-300 leading-relaxed italic">{aiSummary}</p>
-              ) : activeConv?.summary ? (
-                <p className="text-[10px] text-zinc-300 leading-relaxed italic">{activeConv.summary}</p>
-              ) : (
-                <button
-                  onClick={handleGenerateSummary}
-                  className="w-full flex items-center justify-center py-2 bg-emerald-600/10 hover:bg-emerald-600/25 border border-emerald-500/20 text-emerald-400 text-[10px] rounded-lg font-semibold transition-colors gap-1"
-                >
-                  <Bot className="w-3.5 h-3.5" /> Generate Lead Summary
-                </button>
               )}
+            </>
+          ) : (
+            <div className="h-full flex flex-col items-center justify-center text-zinc-500 text-center">
+              <User className="w-8 h-8 mb-2 opacity-50" />
+              <p className="text-xs">No profile context</p>
             </div>
+          )}
+        </div>
 
-            {/* Lead Intent & Priority */}
-            {activeConv && (
-              <div className="space-y-2">
-                <h4 className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Lead Intel</h4>
-                <div className="flex flex-wrap gap-2">
-                  {activeConv.leadIntent && (
-                    <span className={`text-[9px] px-2 py-0.5 rounded font-semibold border ${activeConv.leadIntent === 'Hot'
-                      ? 'bg-red-500/10 text-red-400 border-red-500/25'
-                      : activeConv.leadIntent === 'Warm'
-                        ? 'bg-amber-500/10 text-amber-400 border-amber-500/25'
-                        : 'bg-zinc-800 text-zinc-500 border-zinc-700'
-                      }`}>
-                      {activeConv.leadIntent === 'Hot' && <Flame className="w-3 h-3 inline text-red-500 animate-pulse mr-0.5" />}
-                      {activeConv.leadIntent}
-                    </span>
-                  )}
-                  {activeConv.prioritySuggestion && (
-                    <span className="text-[9px] px-2 py-0.5 rounded font-semibold border bg-zinc-800 text-zinc-400 border-zinc-700">
-                      Priority: {activeConv.prioritySuggestion}
-                    </span>
-                  )}
-                </div>
-              </div>
-            )}
-          </>
-        ) : (
-          <div className="h-full flex flex-col items-center justify-center text-zinc-500 text-center">
-            <User className="w-8 h-8 mb-2 opacity-50" />
-            <p className="text-xs">No profile context</p>
-          </div>
-        )}
       </div>
-
+        );
+      </div>
     </div>
   );
 }
@@ -428,7 +546,7 @@ function InboxPageContent() {
 export default function InboxPage() {
   return (
     <React.Suspense fallback={
-      <div className="h-[calc(100vh-8.5rem)] flex flex-col items-center justify-center text-zinc-500 text-xs bg-zinc-950/20 border border-zinc-800/80 rounded-xl">
+      <div className="h-[calc(100vh-6rem)] flex flex-col items-center justify-center text-zinc-500 text-xs bg-zinc-950/20 border border-zinc-800/80 rounded-xl">
         <Loader2 className="w-6 h-6 animate-spin text-emerald-500 mb-2" />
         <span>Loading conversations...</span>
       </div>

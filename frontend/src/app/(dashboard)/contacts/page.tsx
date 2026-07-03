@@ -2,15 +2,15 @@
 
 import React, { useState } from 'react';
 import { useContacts, useCreateContact, useUpdateContact } from '@/lib/hooks/use-crm';
-import { 
-  Search, 
-  Filter, 
-  MessageSquare, 
-  Mail, 
-  Phone, 
-  MoreVertical, 
-  Plus, 
-  Flame, 
+import {
+  Search,
+  Filter,
+  MessageSquare,
+  Mail,
+  Phone,
+  MoreVertical,
+  Plus,
+  Flame,
   ArrowUpDown,
   Tag as TagIcon,
   X,
@@ -31,8 +31,8 @@ export default function ContactsPage() {
   const [editContact, setEditContact] = useState<Contact | null>(null);
 
   const filteredContacts = (contacts || []).filter(contact => {
-    const matchesSearch = 
-      contact.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+    const matchesSearch =
+      contact.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       contact.phone.includes(searchQuery) ||
       (contact.email && contact.email.toLowerCase().includes(searchQuery.toLowerCase()));
 
@@ -79,11 +79,10 @@ export default function ContactsPage() {
             <button
               key={status}
               onClick={() => setSelectedStatus(status)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                selectedStatus === status
-                  ? 'bg-emerald-600/10 text-emerald-400 border border-emerald-500/35'
-                  : 'bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-zinc-200'
-              }`}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${selectedStatus === status
+                ? 'bg-emerald-600/10 text-emerald-400 border border-emerald-500/35'
+                : 'bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-zinc-200'
+                }`}
             >
               {status}
             </button>
@@ -118,9 +117,9 @@ export default function ContactsPage() {
                   {/* Name and Basic Metadata */}
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-3">
-                      <img 
-                        src={contact.avatarUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150'} 
-                        alt={contact.name} 
+                      <img
+                        src={contact.avatarUrl || '/avatar.svg'}
+                        alt={contact.name}
                         className="w-8 h-8 rounded-full object-cover ring-1 ring-zinc-800"
                       />
                       <div>
@@ -137,15 +136,14 @@ export default function ContactsPage() {
 
                   {/* Status Badge */}
                   <td className="px-6 py-4">
-                    <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-medium border ${
-                      contact.status === 'Won' 
-                        ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' 
-                        : contact.status === 'Lost'
+                    <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-medium border ${contact.status === 'Won'
+                      ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                      : contact.status === 'Lost'
                         ? 'bg-red-500/10 text-red-400 border-red-500/20'
                         : contact.status === 'New'
-                        ? 'bg-blue-500/10 text-blue-400 border-blue-500/20'
-                        : 'bg-zinc-800 border-zinc-750 text-zinc-400'
-                    }`}>
+                          ? 'bg-blue-500/10 text-blue-400 border-blue-500/20'
+                          : 'bg-zinc-800 border-zinc-750 text-zinc-400'
+                      }`}>
                       {contact.status}
                     </span>
                   </td>
@@ -153,13 +151,12 @@ export default function ContactsPage() {
                   {/* Intent classification */}
                   <td className="px-6 py-4">
                     {contact.leadClassification && (
-                      <span className={`text-[10px] px-2 py-0.5 rounded font-semibold border ${
-                        contact.leadClassification === 'Hot'
-                          ? 'bg-red-500/10 text-red-400 border-red-500/25 flex items-center gap-0.5'
-                          : contact.leadClassification === 'Warm'
+                      <span className={`text-[10px] px-2 py-0.5 rounded font-semibold border ${contact.leadClassification === 'Hot'
+                        ? 'bg-red-500/10 text-red-400 border-red-500/25 flex items-center gap-0.5'
+                        : contact.leadClassification === 'Warm'
                           ? 'bg-amber-500/10 text-amber-400 border-amber-500/25'
                           : 'bg-zinc-800 text-zinc-400 border-zinc-700'
-                      }`}>
+                        }`}>
                         {contact.leadClassification === 'Hot' && <Flame className="w-3 h-3 text-red-500 inline animate-pulse" />}
                         {contact.leadClassification}
                       </span>
@@ -168,31 +165,30 @@ export default function ContactsPage() {
 
                   {/* Priority */}
                   <td className="px-6 py-4">
-                    <span className={`font-semibold ${
-                      contact.priority === 'High' ? 'text-red-400' : contact.priority === 'Medium' ? 'text-amber-400' : 'text-zinc-500'
-                    }`}>
+                    <span className={`font-semibold ${contact.priority === 'High' ? 'text-red-400' : contact.priority === 'Medium' ? 'text-amber-400' : 'text-zinc-500'
+                      }`}>
                       {contact.priority}
                     </span>
                   </td>
 
                   {/* Last Contacted */}
                   <td className="px-6 py-4 text-zinc-500">
-                    {contact.lastContacted 
-                      ? new Date(contact.lastContacted).toLocaleDateString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) 
+                    {contact.lastContacted
+                      ? new Date(contact.lastContacted).toLocaleDateString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
                       : 'Never'}
                   </td>
 
                   {/* Action trigger links */}
                   <td className="px-6 py-4 text-right">
                     <div className="flex justify-end gap-2">
-                      <Link 
+                      <Link
                         href={`/inbox?active=${contact.id}`}
                         className="p-1.5 hover:bg-emerald-600/10 border border-transparent hover:border-emerald-500/20 rounded-lg text-zinc-400 hover:text-emerald-400 transition-all"
                         title="Chat with lead"
                       >
                         <MessageSquare className="w-4 h-4" />
                       </Link>
-                      <button 
+                      <button
                         onClick={() => setEditContact(contact)}
                         className="p-1.5 hover:bg-zinc-800 rounded-lg text-zinc-400 hover:text-zinc-200 transition-all"
                         title="Edit contact"
@@ -206,8 +202,26 @@ export default function ContactsPage() {
 
               {!isLoading && filteredContacts.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-6 py-12 text-center text-zinc-500">
-                    No contacts match the search or filter settings.
+                  <td colSpan={6} className="px-6 py-16 text-center">
+                    {(contacts || []).length === 0 ? (
+                      <div className="flex flex-col items-center gap-3">
+                        <div className="w-12 h-12 rounded-full bg-emerald-500/10 flex items-center justify-center">
+                          <Plus className="w-6 h-6 text-emerald-400" />
+                        </div>
+                        <div>
+                          <p className="text-sm font-semibold text-zinc-300">No contacts yet</p>
+                          <p className="text-xs text-zinc-500 mt-1">Add your first contact to get started.</p>
+                        </div>
+                        <button
+                          onClick={() => setShowCreateModal(true)}
+                          className="mt-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold transition-all"
+                        >
+                          Create Contact
+                        </button>
+                      </div>
+                    ) : (
+                      <p className="text-zinc-500 text-xs">No contacts match the search or filter settings.</p>
+                    )}
                   </td>
                 </tr>
               )}

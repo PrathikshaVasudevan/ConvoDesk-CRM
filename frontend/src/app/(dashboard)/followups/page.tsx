@@ -1,12 +1,12 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useFollowUps, useCreateFollowUp, useContacts } from '@/lib/hooks/use-crm';
 import { Square, User, Plus, Clock, CheckCircle2, X } from 'lucide-react';
 
 export default function FollowUpsPage() {
   const { data: followups = [], toggleStatus, isLoading } = useFollowUps();
-  const { data: contacts } = useContacts();
+  const { data: contacts = [] } = useContacts();
   const createFollowUp = useCreateFollowUp();
 
   const [filter, setFilter] = useState<'all' | 'pending' | 'completed'>('all');
@@ -19,7 +19,17 @@ export default function FollowUpsPage() {
     priority: 'Medium',
   });
 
-  const filteredFollowUps = followups.filter((item) => {
+  // Enrich followups with contact names (mapFollowUp returns empty contactName)
+  const enrichedFollowUps = useMemo(() => {
+    if (!contacts.length) return followups;
+    const contactMap = new Map(contacts.map((c) => [c.id, c.name]));
+    return followups.map((item) => ({
+      ...item,
+      contactName: item.contactName || contactMap.get(item.contactId) || 'Unknown',
+    }));
+  }, [followups, contacts]);
+
+  const filteredFollowUps = enrichedFollowUps.filter((item) => {
     if (filter === 'all') return true;
     return item.status === filter;
   });
@@ -146,10 +156,10 @@ export default function FollowUpsPage() {
                 <div className="flex items-center gap-3 self-end sm:self-center">
                   <span
                     className={`px-2 py-0.5 text-[8px] font-bold rounded uppercase border ${getPriorityStyle(
-                      item.priority
+                      item.priority ?? 'Medium'
                     )}`}
                   >
-                    {item.priority}
+                    {item.priority ?? 'Medium'}
                   </span>
                 </div>
               </div>
@@ -157,10 +167,28 @@ export default function FollowUpsPage() {
           })}
 
           {!isLoading && filteredFollowUps.length === 0 && (
-  <div className="p-12 text-center text-zinc-500">
-    No {filter} follow-ups scheduled.
-  </div>
-)}
+            <div className="p-12 text-center">
+              {enrichedFollowUps.length === 0 ? (
+                <div className="flex flex-col items-center gap-3">
+                  <div className="w-12 h-12 rounded-full bg-emerald-500/10 flex items-center justify-center">
+                    <Plus className="w-6 h-6 text-emerald-400" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-zinc-300">No follow-ups yet</p>
+                    <p className="text-xs text-zinc-500 mt-1">Create your first follow-up task to stay on top of leads.</p>
+                  </div>
+                  <button
+                    onClick={() => setShowModal(true)}
+                    className="mt-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold transition-all"
+                  >
+                    Add Task
+                  </button>
+                </div>
+              ) : (
+                <p className="text-zinc-500 text-xs">No {filter} follow-ups scheduled.</p>
+              )}
+            </div>
+          )}
         </div>
       </div>
 

@@ -2,27 +2,27 @@
 
 import React from 'react';
 import { useAnalyticsStats, useContacts } from '@/lib/hooks/use-crm';
-import { 
-  Users, 
-  MessageSquare, 
-  CheckSquare, 
-  TrendingUp, 
-  ArrowUpRight, 
-  Plus, 
-  Clock, 
+import {
+  Users,
+  MessageSquare,
+  CheckSquare,
+  TrendingUp,
+  ArrowUpRight,
+  Plus,
+  Clock,
   ChevronRight,
   Flame,
   AlertCircle,
   Loader2
 } from 'lucide-react';
 import Link from 'next/link';
-import { 
-  BarChart, 
-  Bar, 
-  XAxis, 
-  YAxis, 
-  CartesianGrid, 
-  Tooltip, 
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
   ResponsiveContainer,
   PieChart,
   Pie,
@@ -157,8 +157,8 @@ export default function DashboardPage() {
                   <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
                   <XAxis dataKey="name" stroke="#71717a" fontSize={11} tickLine={false} axisLine={false} />
                   <YAxis stroke="#71717a" fontSize={11} tickLine={false} axisLine={false} />
-                  <Tooltip 
-                    contentStyle={{ backgroundColor: '#18181b', borderColor: '#27272a', borderRadius: '8px' }} 
+                  <Tooltip
+                    contentStyle={{ backgroundColor: '#18181b', borderColor: '#27272a', borderRadius: '8px' }}
                     labelStyle={{ color: '#a1a1aa', fontWeight: 'bold' }}
                   />
                   <Bar dataKey="count" fill="#10b981" radius={[4, 4, 0, 0]} maxBarSize={30} />
@@ -193,7 +193,7 @@ export default function DashboardPage() {
                       <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                     ))}
                   </Pie>
-                  <Tooltip 
+                  <Tooltip
                     contentStyle={{ backgroundColor: '#18181b', borderColor: '#27272a', borderRadius: '8px' }}
                   />
                 </PieChart>
@@ -236,9 +236,9 @@ export default function DashboardPage() {
           {recentContacts.length > 0 ? recentContacts.map((contact) => (
             <div key={contact.id} className="px-6 py-4 flex items-center justify-between hover:bg-zinc-900/20 transition-all">
               <div className="flex items-center gap-3">
-                <img 
-                  src={contact.avatarUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150'} 
-                  alt={contact.name} 
+                <img
+                  src={contact.avatarUrl || '/avatar.svg'}
+                  alt={contact.name}
                   className="w-9 h-9 rounded-full object-cover ring-1 ring-zinc-800"
                 />
                 <div>
@@ -246,17 +246,16 @@ export default function DashboardPage() {
                   <p className="text-[10px] text-zinc-400 mt-0.5">{contact.phone}</p>
                 </div>
               </div>
-              
+
               <div className="flex items-center gap-6">
                 {/* Intent classification */}
                 {contact.leadClassification && (
-                  <span className={`text-[10px] px-2 py-0.5 rounded font-semibold border ${
-                    contact.leadClassification === 'Hot' 
-                      ? 'bg-red-500/10 text-red-400 border-red-500/25 flex items-center gap-0.5' 
+                  <span className={`text-[10px] px-2 py-0.5 rounded font-semibold border ${contact.leadClassification === 'Hot'
+                      ? 'bg-red-500/10 text-red-400 border-red-500/25 flex items-center gap-0.5'
                       : contact.leadClassification === 'Warm'
-                      ? 'bg-amber-500/10 text-amber-400 border-amber-500/25'
-                      : 'bg-zinc-800 text-zinc-400 border-zinc-700'
-                  }`}>
+                        ? 'bg-amber-500/10 text-amber-400 border-amber-500/25'
+                        : 'bg-zinc-800 text-zinc-400 border-zinc-700'
+                    }`}>
                     {contact.leadClassification === 'Hot' && <Flame className="w-3 h-3 inline text-red-500 animate-pulse" />}
                     {contact.leadClassification}
                   </span>
@@ -270,11 +269,11 @@ export default function DashboardPage() {
                 {/* Last active time */}
                 <div className="hidden sm:flex items-center text-[10px] text-zinc-500 gap-1">
                   <Clock className="w-3.5 h-3.5" />
-                  <span>{contact.lastContacted ? new Date(contact.lastContacted).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '—'}</span>
+                  <span>{contact.lastContacted ? new Date(contact.lastContacted).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'}</span>
                 </div>
 
-                <Link 
-                  href={`/inbox?active=${contact.id}`} 
+                <Link
+                  href={`/inbox?active=${contact.id}`}
                   className="p-1.5 hover:bg-zinc-800 rounded-lg text-zinc-500 hover:text-emerald-400 transition-colors"
                 >
                   <ArrowUpRight className="w-4 h-4" />

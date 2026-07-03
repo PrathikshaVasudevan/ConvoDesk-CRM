@@ -3,16 +3,16 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { 
-  LayoutDashboard, 
-  MessageSquare, 
-  Users, 
-  Columns, 
-  CheckSquare, 
-  BarChart3, 
-  Settings, 
-  LogOut, 
-  Menu, 
+import {
+  LayoutDashboard,
+  MessageSquare,
+  Users,
+  Columns,
+  CheckSquare,
+  BarChart3,
+  Settings,
+  LogOut,
+  Menu,
   X,
   Sparkles,
   Search,
@@ -21,10 +21,10 @@ import {
 
 const sidebarItems = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-  { name: 'Inbox', href: '/inbox', icon: MessageSquare, badge: 3 },
+  { name: 'Inbox', href: '/inbox', icon: MessageSquare },
   { name: 'Contacts', href: '/contacts', icon: Users },
   { name: 'Pipeline', href: '/pipeline', icon: Columns },
-  { name: 'Follow-ups', href: '/followups', icon: CheckSquare, badge: 4 },
+  { name: 'Follow-ups', href: '/followups', icon: CheckSquare },
   { name: 'Analytics', href: '/analytics', icon: BarChart3 },
   { name: 'Settings', href: '/settings', icon: Settings },
 ];
@@ -51,9 +51,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             </div>
             <div className="flex flex-col">
               <span className="text-md font-bold tracking-tight bg-gradient-to-r from-zinc-50 to-zinc-400 bg-clip-text text-transparent">ConvoDesk</span>
-              <span className="text-[10px] text-emerald-500 font-semibold uppercase tracking-wider flex items-center gap-0.5">
-                <Sparkles className="w-2.5 h-2.5" /> AI Engine
-              </span>
+
             </div>
           </div>
 
@@ -66,23 +64,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 <Link
                   key={item.name}
                   href={item.href}
-                  className={`group flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-all duration-200 ${
-                    isActive
-                      ? 'bg-emerald-600/10 text-emerald-400 border-l-2 border-emerald-500 shadow-[inset_1px_0_0_0_rgba(16,185,129,0.1)]'
-                      : 'text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800/40'
-                  }`}
+                  className={`group flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-all duration-200 ${isActive
+                    ? 'bg-emerald-600/10 text-emerald-400 border-l-2 border-emerald-500 shadow-[inset_1px_0_0_0_rgba(16,185,129,0.1)]'
+                    : 'text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800/40'
+                    }`}
                 >
-                  <Icon className={`mr-3 h-5 w-5 flex-shrink-0 transition-colors ${
-                    isActive ? 'text-emerald-400' : 'text-zinc-500 group-hover:text-zinc-300'
-                  }`} />
+                  <Icon className={`mr-3 h-5 w-5 flex-shrink-0 transition-colors ${isActive ? 'text-emerald-400' : 'text-zinc-500 group-hover:text-zinc-300'
+                    }`} />
                   <span className="flex-1">{item.name}</span>
-                  {item.badge ? (
-                    <span className={`ml-2 px-2 py-0.5 text-xs font-semibold rounded-full ${
-                      isActive ? 'bg-emerald-500/20 text-emerald-300' : 'bg-zinc-800 text-zinc-400'
-                    }`}>
-                      {item.badge}
-                    </span>
-                  ) : null}
                 </Link>
               );
             })}
@@ -91,17 +80,17 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           {/* User Profile Info Footer */}
           <div className="p-4 border-t border-zinc-800/80 bg-zinc-900/30">
             <div className="flex items-center gap-3 mb-3">
-              <img 
-                src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150" 
-                alt="Agent Profile" 
-                className="w-9 h-9 rounded-full ring-2 ring-emerald-500/30 object-cover" 
+              <img
+                src="/avatar.svg"
+                alt="Agent Profile"
+                className="w-9 h-9 rounded-full ring-2 ring-emerald-500/30 object-cover"
               />
               <div className="flex-1 min-w-0">
                 <p className="text-xs font-semibold text-zinc-200 truncate">Alex Mercer</p>
                 <p className="text-[10px] text-zinc-500 truncate">alex@convodesk.crm</p>
               </div>
             </div>
-            <Link 
+            <Link
               href="/login"
               className="flex items-center justify-center w-full px-3 py-2 text-xs font-medium text-zinc-400 hover:text-zinc-200 bg-zinc-800/40 hover:bg-zinc-800/80 border border-zinc-800 rounded-md transition-colors gap-1.5"
             >
@@ -140,9 +129,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                     key={item.name}
                     href={item.href}
                     onClick={() => setMobileMenuOpen(false)}
-                    className={`group flex items-center px-3 py-2.5 text-base font-medium rounded-lg ${
-                      isActive ? 'bg-emerald-600/10 text-emerald-400' : 'text-zinc-400 hover:text-zinc-200'
-                    }`}
+                    className={`group flex items-center px-3 py-2.5 text-base font-medium rounded-lg ${isActive ? 'bg-emerald-600/10 text-emerald-400' : 'text-zinc-400 hover:text-zinc-200'
+                      }`}
                   >
                     <Icon className="mr-4 h-6 w-6 text-zinc-400 group-hover:text-zinc-300" />
                     {item.name}
@@ -179,7 +167,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 className="w-64 pl-9 pr-4 py-1.5 text-xs bg-zinc-900 border border-zinc-800 rounded-lg text-zinc-200 placeholder-zinc-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500"
               />
             </div>
-            
+
             <button className="relative p-2 bg-zinc-900 border border-zinc-850 hover:bg-zinc-800 rounded-lg transition-colors text-zinc-400 hover:text-zinc-200">
               <Bell className="w-4 h-4" />
               <span className="absolute top-1 right-1 w-2 h-2 bg-emerald-500 rounded-full" />
@@ -187,9 +175,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
             <div className="h-6 w-px bg-zinc-800" />
 
-            <div className="flex items-center gap-2">
-              <span className="hidden sm:block text-xs font-semibold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">Active Pilot</span>
-            </div>
           </div>
         </header>
 

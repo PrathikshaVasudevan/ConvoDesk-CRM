@@ -11,6 +11,7 @@ export function useContacts() {
       return await api.contacts.list();
     },
     initialData: [],
+    initialDataUpdatedAt: 0,
   });
 }
 
@@ -75,6 +76,7 @@ export function useConversations() {
       });
     },
     initialData: [],
+    initialDataUpdatedAt: 0,
   });
 }
 
@@ -87,6 +89,7 @@ export function useMessages(conversationId: string | null) {
     },
     enabled: !!conversationId,
     initialData: [],
+    initialDataUpdatedAt: 0,
   });
 }
 
@@ -113,6 +116,7 @@ export function useFollowUps() {
       return await api.followups.list();
     },
     initialData: [],
+    initialDataUpdatedAt: 0,
   });
 
   const toggleMutation = useMutation({
